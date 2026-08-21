@@ -29,16 +29,16 @@
   </div>
   
   <form action="/api/process_login.php" method="POST">
-    <label class="lbl">Phone Number</label>
-    <input class="inp" type="tel" name="phone_number" placeholder="0912345678" required>
+    <label for="phone" class="lbl">Phone Number</label>
+    <input id="phone" class="inp" type="tel" name="phone_number" placeholder="0912345678" required autocomplete="tel">
     
-    <label class="lbl">Password</label>
-    <input class="inp" type="password" name="password" placeholder="Enter your password" required>
+    <label for="password" class="lbl">Password</label>
+    <input id="password" class="inp" type="password" name="password" placeholder="Enter your password" required autocomplete="current-password">
     
     <button type="submit" class="btn">Sign In</button>
     
     <div class="footer-text">
-      Don't have an account? <a href="signup.html">Join Kahawa Club</a>
+      Don't have an account? <a href="/signup.html">Join Kahawa Club</a>
     </div>
   </form>
 </div>
