@@ -63,7 +63,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             </div>
             <script>
                 setTimeout(function() {
-                    window.location.href = "index.html";
+                    window.location.href = "/index.html";
                 }, 2500);
             </script>
         </body>
@@ -98,7 +98,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 <div class="icon">&#9888;</div>
                 <h2>Registration Failed</h2>
                 <p>' . htmlspecialchars($errorMessage) . '</p>
-                <a href="signup.html" class="btn">Try Again</a>
+                <a href="/signup.html" class="btn">Try Again</a>
             </div>
         </body>
         </html>';
