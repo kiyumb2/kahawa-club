@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kahawa Club - Sign In</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, sans-serif; background: #111; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+  .container { width: 100%; max-width: 420px; background: #fff; border-radius: 24px; padding: 32px 24px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); }
+  .header { text-align: center; margin-bottom: 24px; }
+  .title { font-size: 26px; font-weight: 900; color: #111; margin-bottom: 6px; }
+  .title span { color: #C49A6C; }
+  .subtitle { font-size: 13px; color: #666; }
+  .lbl { display: block; font-size: 11px; font-weight: 700; color: #7A5C45; letter-spacing: 1px; text-transform: uppercase; margin: 14px 0 6px; }
+  .inp { width: 100%; padding: 12px; background: #F5EDE3; border: 1.5px solid rgba(111,78,55,0.2); border-radius: 10px; font-size: 14px; outline: none; color: #333; }
+  .inp:focus { border-color: #C49A6C; background: white; }
+  .btn { width: 100%; padding: 14px; background: #6F4E37; color: white; border: none; border-radius: 12px; font-size: 15px; font-weight: 700; cursor: pointer; margin-top: 20px; }
+  .btn:hover { background: #5a3d2c; }
+  .footer-text { text-align: center; margin-top: 14px; font-size: 13px; color: #7A5C45; }
+  .footer-text a { color: #6F4E37; font-weight: bold; text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title">Kahawa <span>Club</span></div>
+    <div class="subtitle">Welcome back! Please sign in to your account.</div>
+  </div>
+  
+  <form action="process_login.php" method="POST">
+    <label class="lbl">Phone Number</label>
+    <input class="inp" type="tel" name="phone_number" placeholder="0912345678" required>
+    
+    <label class="lbl">Password</label>
+    <input class="inp" type="password" name="password" placeholder="Enter your password" required>
+    
+    <button type="submit" class="btn">Sign In</button>
+    
+    <div class="footer-text">
+      Don't have an account? <a href="signup.html">Join Kahawa Club</a>
+    </div>
+  </form>
+</div>
+</body>
+</html>
