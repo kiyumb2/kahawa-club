@@ -1,23 +1,27 @@
 <?php
-// Match session cookie configuration for Vercel serverless persistence
-ini_set('session.use_only_cookies', 1);
-ini_set('session.use_strict_mode', 1);
+define('ENCRYPTION_KEY', 'kahawa_secret_key_change_this_123456!');
 
-session_set_cookie_params([
-    'lifetime' => 86400,
-    'path'     => '/',
-    'secure'   => true,
-    'httponly' => true,
-    'samesite' => 'Lax'
-]);
+/**
+ * Decrypt cookie data
+ */
+function decryptCookie($cookieValue) {
+    $parts = explode('::', base64_decode($cookieValue), 2);
+    if (count($parts) !== 2) return null;
+    list($encrypted_data, $iv) = $parts;
+    $decrypted = openssl_decrypt($encrypted_data, 'aes-256-cbc', ENCRYPTION_KEY, 0, $iv);
+    return json_decode($decrypted, true);
+}
 
-session_start();
+// Read encrypted cookie session
+$sessionData = isset($_COOKIE['user_session']) ? decryptCookie($_COOKIE['user_session']) : null;
 
-// Redirect to root login if user session does not exist
-if (!isset($_SESSION['user_id'])) {
+// Redirect if cookie is missing or invalid
+if (!$sessionData || empty($sessionData['user_id'])) {
     header("Location: /index.html");
     exit;
 }
+
+$user_id = $sessionData['user_id'];
 
 // Central Supabase PostgreSQL PDO Connection
 require_once __DIR__ . '/db.php';
@@ -25,11 +29,12 @@ require_once __DIR__ . '/db.php';
 try {
     // 1. Fetch current user data
     $stmt = $pdo->prepare("SELECT * FROM users WHERE id = ?");
-    $stmt->execute([$_SESSION['user_id']]);
+    $stmt->execute([$user_id]);
     $current_user = $stmt->fetch();
 
     if (!$current_user) {
-        session_destroy();
+        // Clear cookie if user not found
+        setcookie('user_session', '', time() - 3600, '/');
         header("Location: /index.html");
         exit;
     }
@@ -45,7 +50,7 @@ try {
 
     // 2. Fetch recent reward/points transaction history
     $historyStmt = $pdo->prepare("SELECT * FROM reward_history WHERE user_id = ? ORDER BY created_at DESC LIMIT 20");
-    $historyStmt->execute([$_SESSION['user_id']]);
+    $historyStmt->execute([$user_id]);
     $rewardHistory = $historyStmt->fetchAll();
 
 } catch (PDOException $e) {
