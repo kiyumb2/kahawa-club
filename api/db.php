@@ -1,22 +1,22 @@
 <?php
-// Central DB connection for Supabase (PostgreSQL)
-
-// Option 1: Parse full connection string if DATABASE_URL is set in Vercel
+// Central DB connection for Supabase via Connection Pooler (IPv4 Compatible)
 $db_url = getenv('DATABASE_URL');
 
 if ($db_url) {
     $dbopts = parse_url($db_url);
     $host = $dbopts['host'];
-    $port = $dbopts['port'] ?? 5432;
+    $port = $dbopts['port'] ?? 6543;
     $user = $dbopts['user'];
     $pass = $dbopts['pass'];
     $db   = ltrim($dbopts['path'], '/');
 } else {
-    // Option 2: Fallback to individual environment variables or direct values
-   $host = getenv('SUPABASE_DB_HOST') ?: 'db.vxpqsbjjegvkjusiktxd.supabase.co'; // Replace YOUR_SUPABASE_REF with your real reference ID
-    $port = getenv('SUPABASE_DB_PORT') ?: '5432';
+    // Fallback using Supabase Transaction Pooler Host and Port 6543
+    $host = getenv('SUPABASE_DB_HOST') ?: 'aws-0-eu-west-1.pooler.supabase.com';
+    $port = getenv('SUPABASE_DB_PORT') ?: '6543';
     $db   = getenv('SUPABASE_DB_NAME') ?: 'postgres';
-    $user = getenv('SUPABASE_DB_USER') ?: 'postgres';
+    
+    // User format for pooler: postgres.vxpqsbjjegvkjusiktxd
+    $user = getenv('SUPABASE_DB_USER') ?: 'postgres.vxpqsbjjegvkjusiktxd';
     $pass = getenv('SUPABASE_DB_PASS') ?: '0926440279@Kiyu';
 }
 
