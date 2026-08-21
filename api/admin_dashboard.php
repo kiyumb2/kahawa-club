@@ -167,7 +167,7 @@ try {
   body { background: #1e1e1e; display: flex; justify-content: center; align-items: center; min-height: 100vh; color: #333; padding: 20px 0; }
   .app-container { 
     width: 100%; max-width: 480px; background: #F9F6F0; border-radius: 30px; 
-    padding: 24px; box-shadow: 0 20px 40px rgba(0,0,0,0.5); border: 8px solid #2c2c2c;
+    padding: 24px 24px 80px 24px; box-shadow: 0 20px 40px rgba(0,0,0,0.5); border: 8px solid #2c2c2c; position: relative;
   }
   .header { text-align: center; margin-bottom: 20px; }
   .header h1 { font-size: 18px; font-weight: 900; color: #111; letter-spacing: 1px; }
@@ -230,6 +230,42 @@ try {
   .finance-item.fee { border-left: 4px solid #b7094c; }
   .finance-item.debt { border-left: 4px solid #e85d04; }
   .finance-amount { font-weight: 900; }
+
+  /* Bottom Navigation Styles */
+  .bottom-nav {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 65px;
+    background: #ffffff;
+    border-bottom-left-radius: 22px;
+    border-bottom-right-radius: 22px;
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    border-top: 1px solid #eee;
+    box-shadow: 0 -4px 15px rgba(0,0,0,0.03);
+  }
+  .nav-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-decoration: none;
+    color: #888;
+    font-size: 10px;
+    font-weight: bold;
+    gap: 4px;
+  }
+  .nav-item.active {
+    color: #6f4e37;
+  }
+  .nav-item .icon {
+    font-size: 18px;
+  }
+  .nav-item.logout {
+    color: #d9534f;
+  }
 </style>
 </head>
 <body>
@@ -371,6 +407,23 @@ try {
       <?php endif; ?>
     </div>
   </div>
+
+  <!-- Bottom Navigation Menu -->
+  <nav class="bottom-nav">
+    <a href="/api/admin_dashboard" class="nav-item active">
+      <span class="icon">⚡</span>
+      <span>Admin</span>
+    </a>
+    <a href="/api/dashboard" class="nav-item">
+      <span class="icon">📱</span>
+      <span>App View</span>
+    </a>
+    <a href="/api/logout" class="nav-item logout">
+      <span class="icon">🚪</span>
+      <span>Logout</span>
+    </a>
+  </nav>
+
 </div>
 </body>
 </html>
