@@ -48,43 +48,61 @@ function showLoginError($message) {
 
 if ($_SERVER["REQUEST_METHOD"] === "POST") {
     try {
-        $phone_number = trim($_POST['phone_number'] ?? '');
-        $password     = $_POST['password'] ?? '';
+        $login_input = trim($_POST['phone_number'] ?? '');
+        $password    = $_POST['password'] ?? '';
 
-        if (empty($phone_number) || empty($password)) {
-            showLoginError("Please enter both your phone number and password.");
+        if (empty($login_input) || empty($password)) {
+            showLoginError("Please enter both your login credential and password.");
         }
 
-        // Fetch user matching phone number
-        $stmt = $pdo->prepare("SELECT * FROM users WHERE phone_number = ?");
-        $stmt->execute([$phone_number]);
+        // Search by phone_number OR username if the column exists
+        $stmt = $pdo->prepare("SELECT * FROM users WHERE phone_number = ? OR username = ?");
+        $stmt->execute([$login_input, $login_input]);
         $user = $stmt->fetch();
 
-        if ($user && password_verify($password, $user['password'])) {
-            $sessionData = [
-                'user_id'    => $user['id'],
-                'first_name' => $user['first_name'],
-                'last_name'  => $user['last_name'],
-                'time'       => time()
-            ];
+        if ($user) {
+            $is_valid = false;
 
-            $encryptedCookie = encryptCookie($sessionData);
+            // Check using password_verify
+            if (password_verify($password, $user['password'])) {
+                $is_valid = true;
+            } 
+            // Fallback: Check plain-text password if created manually in Supabase
+            elseif ($password === $user['password']) {
+                $is_valid = true;
+                // Auto-hash password in DB for future logins
+                $newHash = password_hash($password, PASSWORD_BCRYPT);
+                $updateStmt = $pdo->prepare("UPDATE users SET password = ? WHERE id = ?");
+                $updateStmt->execute([$newHash, $user['id']]);
+            }
 
-            // Set encrypted authentication cookie for 7 days
-            setcookie('user_session', $encryptedCookie, [
-                'expires'  => time() + (86400 * 7),
-                'path'     => '/',
-                'secure'   => true,
-                'httponly' => true,
-                'samesite' => 'Lax'
-            ]);
+            if ($is_valid) {
+                $sessionData = [
+                    'user_id'    => $user['id'],
+                    'first_name' => $user['first_name'] ?? 'User',
+                    'last_name'  => $user['last_name'] ?? '',
+                    'role'       => $user['role'] ?? 'customer',
+                    'time'       => time()
+                ];
 
-            // Redirect cleanly to dashboard route
-            header("Location: /api/dashboard");
-            exit;
-        } else {
-            showLoginError("Incorrect phone number or password. Please try again.");
+                $encryptedCookie = encryptCookie($sessionData);
+
+                // Set encrypted authentication cookie for 7 days
+                setcookie('user_session', $encryptedCookie, [
+                    'expires'  => time() + (86400 * 7),
+                    'path'     => '/',
+                    'secure'   => true,
+                    'httponly' => true,
+                    'samesite' => 'Lax'
+                ]);
+
+                // Redirect cleanly to dashboard route
+                header("Location: /api/dashboard");
+                exit;
+            }
         }
+
+        showLoginError("Incorrect phone number/username or password. Please try again.");
 
     } catch (PDOException $e) {
         showLoginError("Database Connection Error: " . $e->getMessage());
