@@ -1,9 +1,9 @@
 <?php
 // Central DB connection for Supabase Pooler (IPv4 Compatible)
-$host = 'aws-0-eu-central-1.pooler.supabase.com';
+$host = 'aws-1-eu-west-1.pooler.supabase.com';
 $port = '6543';
 $db   = 'postgres';
-$user = 'postgres.vxpqsbjjegvkjusiktxd';
+$user = 'postgres.kqulwoqhbjwgskygmrhb';
 $pass = '0926440279@Kiyu';
 
 try {
