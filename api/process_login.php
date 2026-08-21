@@ -1,12 +1,22 @@
 <?php
+// Force session cookie to be valid across the entire domain
+ini_set('session.use_only_cookies', 1);
+ini_set('session.use_strict_mode', 1);
+
+session_set_cookie_params([
+    'lifetime' => 86400,
+    'path'     => '/',
+    'secure'   => true,
+    'httponly' => true,
+    'samesite' => 'Lax'
+]);
+
 session_start();
 
-// Include central database connection (Supabase PostgreSQL)
 require_once __DIR__ . '/db.php';
 
 if ($_SERVER["REQUEST_METHOD"] === "POST") {
     try {
-        // Sanitize and check inputs
         $phone_number = trim($_POST['phone_number'] ?? '');
         $password     = $_POST['password'] ?? '';
 
@@ -14,19 +24,18 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             showLoginError("Please enter both your phone number and password.");
         }
 
-        // Search for user in Supabase database by phone number
         $stmt = $pdo->prepare("SELECT * FROM users WHERE phone_number = ?");
         $stmt->execute([$phone_number]);
         $user = $stmt->fetch();
 
-        // Verify password match against the hashed password in the database
         if ($user && password_verify($password, $user['password'])) {
-            // Save session variables
             $_SESSION['user_id']    = $user['id'];
             $_SESSION['first_name'] = $user['first_name'];
             $_SESSION['last_name']  = $user['last_name'];
 
-            // Redirect to dashboard page inside /api/
+            // Explicitly force PHP to write session data before redirecting
+            session_write_close();
+
             header("Location: /api/dashboard.php");
             exit;
         } else {
@@ -37,14 +46,10 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         showLoginError("Database Connection Error: " . $e->getMessage());
     }
 } else {
-    // Redirect to root login page if accessed directly
     header("Location: /index.html");
     exit;
 }
 
-/**
- * Helper function to output the styled error modal
- */
 function showLoginError($message) {
     echo '<!DOCTYPE html>
     <html lang="en">
