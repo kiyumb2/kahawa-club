@@ -2,19 +2,16 @@
   "functions": {
     "api/*.php": {
       "runtime": "vercel-php@0.6.0"
-    },
-    "admin/*.php": {
-      "runtime": "vercel-php@0.6.0"
     }
   },
   "routes": [
     {
-      "src": "/api/(.*)",
-      "dest": "/api/$1"
+      "src": "/admin/dashboard",
+      "dest": "/api/admin_dashboard.php"
     },
     {
-      "src": "/admin/(.*)",
-      "dest": "/admin/$1"
+      "src": "/admin/logout",
+      "dest": "/api/admin_logout.php"
     }
   ]
 }
