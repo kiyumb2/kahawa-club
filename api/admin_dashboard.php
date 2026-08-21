@@ -34,8 +34,8 @@ $userStmt = $pdo->prepare("SELECT * FROM users WHERE id = ?");
 $userStmt->execute([$session['user_id']]);
 $currentUser = $userStmt->fetch();
 
-// Check if user is admin
-$isAdmin = ($currentUser && isset($currentUser['role']) && strtolower($currentUser['role']) === 'admin');
+// Check if user is admin using the is_admin boolean column
+$isAdmin = ($currentUser && !empty($currentUser['is_admin']) && ($currentUser['is_admin'] === true || $currentUser['is_admin'] === 'TRUE' || $currentUser['is_admin'] == 1));
 
 if (!$isAdmin) {
     // If not admin, stop access
