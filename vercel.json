@@ -1,21 +1,21 @@
 {
   "functions": {
-    "api/*.php": {
+    "api/index.php": {
       "runtime": "vercel-php@0.9.3"
     }
   },
   "routes": [
     {
       "src": "/admin/dashboard",
-      "dest": "/api/admin_dashboard.php"
+      "dest": "/api/index.php"
     },
     {
       "src": "/admin/logout",
-      "dest": "/api/admin_logout.php"
+      "dest": "/api/index.php"
     },
     {
       "src": "/api/(.*)",
-      "dest": "/api/$1.php"
+      "dest": "/api/index.php"
     }
   ]
 }
