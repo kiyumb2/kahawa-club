@@ -30,7 +30,9 @@
     <div class="subtitle">Join Ethiopia's most rewarding coffee experience</div>
   </div>
   
-  <form action="/api/process_signup.php" method="POST">
+ <!-- Incorrect: action="/api/process_signup.php" -->
+<!-- Correct: -->
+<form action="/api/process_signup" method="POST">
     <div class="row">
       <div>
         <label for="first_name" class="lbl">First Name</label>
