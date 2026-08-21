@@ -16,41 +16,38 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     exit;
 }
 
-$username = trim($_POST['username'] ?? '');
-$password = trim($_POST['password'] ?? '');
+$phoneNumber = trim($_POST['phone_number'] ?? '');
+$password    = trim($_POST['password'] ?? '');
 
-if (empty($username) || empty($password)) {
-    echo json_encode(['success' => false, 'message' => 'Please enter username and password']);
+if (empty($phoneNumber) || empty($password)) {
+    echo json_encode(['success' => false, 'message' => 'Please enter phone number and password']);
     exit;
 }
 
 try {
-    // Check if user exists and has admin privileges (is_admin = true or role = 'admin')
-    $stmt = $pdo->prepare("SELECT * FROM users WHERE email = ? AND (is_admin = TRUE OR role = 'admin') LIMIT 1");
-    $stmt->execute([$username]);
+    // Authenticate user with matching phone_number and is_admin = TRUE
+    $stmt = $pdo->prepare("SELECT * FROM users WHERE phone_number = ? AND is_admin = TRUE LIMIT 1");
+    $stmt->execute([$phoneNumber]);
     $admin = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if ($admin && password_verify($password, $admin['password'])) {
         $cookiePayload = [
             'admin_id' => $admin['id'],
-            'email' => $admin['email'],
-            'role' => 'admin',
-            'time' => time()
+            'phone'    => $admin['phone_number'],
+            'role'     => 'admin',
+            'time'     => time()
         ];
         
-        $encryptedCookie = encryptCookie($cookiePayload);
-        
-        // Set encrypted cookie valid for 8 hours
-        setcookie('admin_session', $encryptedCookie, [
-            'expires' => time() + (8 * 3600),
-            'path' => '/',
+        setcookie('admin_session', encryptCookie($cookiePayload), [
+            'expires'  => time() + (8 * 3600),
+            'path'     => '/',
             'httponly' => true,
             'samesite' => 'Lax'
         ]);
 
         echo json_encode(['success' => true]);
     } else {
-        echo json_encode(['success' => false, 'message' => 'Invalid admin credentials']);
+        echo json_encode(['success' => false, 'message' => 'Invalid credentials or account is not an admin']);
     }
 } catch (PDOException $e) {
     echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
