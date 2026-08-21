@@ -1,7 +1,5 @@
 <?php
-session_start();
-session_unset();
-session_destroy();
-header("Location: index.html");
+setcookie('user_session', '', time() - 3600, '/');
+header("Location: /index.html");
 exit;
 ?>
