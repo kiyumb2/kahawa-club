@@ -55,7 +55,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             showLoginError("Please enter both your phone number and password.");
         }
 
-        // Fetch user matching phone_number only
+        // Fetch user matching phone_number strictly
         $stmt = $pdo->prepare("SELECT * FROM users WHERE phone_number = ?");
         $stmt->execute([$phone_number]);
         $user = $stmt->fetch();
@@ -77,11 +77,14 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             }
 
             if ($is_valid) {
+                // Determine admin status based on the is_admin column
+                $isAdmin = (!empty($user['is_admin']) && ($user['is_admin'] === true || $user['is_admin'] === 'TRUE' || $user['is_admin'] == 1));
+
                 $sessionData = [
                     'user_id'    => $user['id'],
                     'first_name' => $user['first_name'] ?? 'User',
                     'last_name'  => $user['last_name'] ?? '',
-                    'role'       => $user['role'] ?? 'customer',
+                    'is_admin'   => $isAdmin,
                     'time'       => time()
                 ];
 
@@ -96,8 +99,12 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                     'samesite' => 'Lax'
                 ]);
 
-                // Redirect cleanly to dashboard route
-                header("Location: /api/dashboard");
+                // Redirect admins to admin dashboard and regular users to customer dashboard
+                if ($isAdmin) {
+                    header("Location: /api/admin_dashboard");
+                } else {
+                    header("Location: /api/dashboard");
+                }
                 exit;
             }
         }
