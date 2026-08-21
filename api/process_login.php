@@ -48,16 +48,16 @@ function showLoginError($message) {
 
 if ($_SERVER["REQUEST_METHOD"] === "POST") {
     try {
-        $login_input = trim($_POST['phone_number'] ?? '');
-        $password    = $_POST['password'] ?? '';
+        $phone_number = trim($_POST['phone_number'] ?? '');
+        $password     = $_POST['password'] ?? '';
 
-        if (empty($login_input) || empty($password)) {
-            showLoginError("Please enter both your login credential and password.");
+        if (empty($phone_number) || empty($password)) {
+            showLoginError("Please enter both your phone number and password.");
         }
 
-        // Search by phone_number OR username if the column exists
-        $stmt = $pdo->prepare("SELECT * FROM users WHERE phone_number = ? OR username = ?");
-        $stmt->execute([$login_input, $login_input]);
+        // Fetch user matching phone_number only
+        $stmt = $pdo->prepare("SELECT * FROM users WHERE phone_number = ?");
+        $stmt->execute([$phone_number]);
         $user = $stmt->fetch();
 
         if ($user) {
@@ -67,10 +67,10 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             if (password_verify($password, $user['password'])) {
                 $is_valid = true;
             } 
-            // Fallback: Check plain-text password if created manually in Supabase
+            // Fallback: Check plain-text password if inserted manually into Supabase
             elseif ($password === $user['password']) {
                 $is_valid = true;
-                // Auto-hash password in DB for future logins
+                // Auto-hash plain-text password in DB for future logins
                 $newHash = password_hash($password, PASSWORD_BCRYPT);
                 $updateStmt = $pdo->prepare("UPDATE users SET password = ? WHERE id = ?");
                 $updateStmt->execute([$newHash, $user['id']]);
@@ -102,7 +102,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             }
         }
 
-        showLoginError("Incorrect phone number/username or password. Please try again.");
+        showLoginError("Incorrect phone number or password. Please try again.");
 
     } catch (PDOException $e) {
         showLoginError("Database Connection Error: " . $e->getMessage());
