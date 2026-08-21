@@ -1,12 +1,12 @@
 <?php
-// Include central database connection (Supabase PostgreSQL)
+// Include database connection
 require_once __DIR__ . '/db.php';
 
-// Define a secret key to encrypt user session cookies (change this to a secure random string)
+// Define secret key for cookie encryption
 define('ENCRYPTION_KEY', 'kahawa_secret_key_change_this_123456!');
 
 /**
- * Encrypt data using AES-256-CBC
+ * Encrypt cookie session payload
  */
 function encryptCookie($data) {
     $iv = openssl_random_pseudo_bytes(openssl_cipher_iv_length('aes-256-cbc'));
@@ -14,52 +14,9 @@ function encryptCookie($data) {
     return base64_encode($encrypted . '::' . $iv);
 }
 
-if ($_SERVER["REQUEST_METHOD"] === "POST") {
-    try {
-        $phone_number = trim($_POST['phone_number'] ?? '');
-        $password     = $_POST['password'] ?? '';
-
-        if (empty($phone_number) || empty($password)) {
-            showLoginError("Please enter both your phone number and password.");
-        }
-
-        $stmt = $pdo->prepare("SELECT * FROM users WHERE phone_number = ?");
-        $stmt->execute([$phone_number]);
-        $user = $stmt->fetch();
-
-        if ($user && password_verify($password, $user['password'])) {
-            $sessionData = [
-                'user_id'    => $user['id'],
-                'first_name' => $user['first_name'],
-                'last_name'  => $user['last_name'],
-                'time'       => time()
-            ];
-
-            $encryptedCookie = encryptCookie($sessionData);
-
-            // Set cookie for 7 days across the whole domain
-            setcookie('user_session', $encryptedCookie, [
-                'expires'  => time() + (86400 * 7),
-                'path'     => '/',
-                'secure'   => true,
-                'httponly' => true,
-                'samesite' => 'Lax'
-            ]);
-
-            header("Location: /api/dashboard.php");
-            exit;
-        } else {
-            showLoginError("Incorrect phone number or password. Please try again.");
-        }
-
-    } catch (PDOException $e) {
-        showLoginError("Database Connection Error: " . $e->getMessage());
-    }
-} else {
-    header("Location: /index.html");
-    exit;
-}
-
+/**
+ * Helper to display error UI and stop script execution
+ */
 function showLoginError($message) {
     echo '<!DOCTYPE html>
     <html lang="en">
@@ -86,6 +43,54 @@ function showLoginError($message) {
         </div>
     </body>
     </html>';
+    exit;
+}
+
+if ($_SERVER["REQUEST_METHOD"] === "POST") {
+    try {
+        $phone_number = trim($_POST['phone_number'] ?? '');
+        $password     = $_POST['password'] ?? '';
+
+        if (empty($phone_number) || empty($password)) {
+            showLoginError("Please enter both your phone number and password.");
+        }
+
+        // Fetch user matching phone number
+        $stmt = $pdo->prepare("SELECT * FROM users WHERE phone_number = ?");
+        $stmt->execute([$phone_number]);
+        $user = $stmt->fetch();
+
+        if ($user && password_verify($password, $user['password'])) {
+            $sessionData = [
+                'user_id'    => $user['id'],
+                'first_name' => $user['first_name'],
+                'last_name'  => $user['last_name'],
+                'time'       => time()
+            ];
+
+            $encryptedCookie = encryptCookie($sessionData);
+
+            // Set encrypted authentication cookie for 7 days
+            setcookie('user_session', $encryptedCookie, [
+                'expires'  => time() + (86400 * 7),
+                'path'     => '/',
+                'secure'   => true,
+                'httponly' => true,
+                'samesite' => 'Lax'
+            ]);
+
+            // Redirect cleanly to dashboard route
+            header("Location: /api/dashboard");
+            exit;
+        } else {
+            showLoginError("Incorrect phone number or password. Please try again.");
+        }
+
+    } catch (PDOException $e) {
+        showLoginError("Database Connection Error: " . $e->getMessage());
+    }
+} else {
+    header("Location: /index.html");
     exit;
 }
 ?>
