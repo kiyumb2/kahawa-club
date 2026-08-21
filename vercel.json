@@ -12,6 +12,10 @@
     {
       "src": "/admin/logout",
       "dest": "/api/admin_logout.php"
+    },
+    {
+      "src": "/api/(.*)",
+      "dest": "/api/$1.php"
     }
   ]
 }
