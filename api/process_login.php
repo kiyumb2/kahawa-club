@@ -1,19 +1,18 @@
 <?php
-// Force session cookie to be valid across the entire domain
-ini_set('session.use_only_cookies', 1);
-ini_set('session.use_strict_mode', 1);
-
-session_set_cookie_params([
-    'lifetime' => 86400,
-    'path'     => '/',
-    'secure'   => true,
-    'httponly' => true,
-    'samesite' => 'Lax'
-]);
-
-session_start();
-
+// Include central database connection (Supabase PostgreSQL)
 require_once __DIR__ . '/db.php';
+
+// Define a secret key to encrypt user session cookies (change this to a secure random string)
+define('ENCRYPTION_KEY', 'kahawa_secret_key_change_this_123456!');
+
+/**
+ * Encrypt data using AES-256-CBC
+ */
+function encryptCookie($data) {
+    $iv = openssl_random_pseudo_bytes(openssl_cipher_iv_length('aes-256-cbc'));
+    $encrypted = openssl_encrypt(json_encode($data), 'aes-256-cbc', ENCRYPTION_KEY, 0, $iv);
+    return base64_encode($encrypted . '::' . $iv);
+}
 
 if ($_SERVER["REQUEST_METHOD"] === "POST") {
     try {
@@ -29,12 +28,23 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         $user = $stmt->fetch();
 
         if ($user && password_verify($password, $user['password'])) {
-            $_SESSION['user_id']    = $user['id'];
-            $_SESSION['first_name'] = $user['first_name'];
-            $_SESSION['last_name']  = $user['last_name'];
+            $sessionData = [
+                'user_id'    => $user['id'],
+                'first_name' => $user['first_name'],
+                'last_name'  => $user['last_name'],
+                'time'       => time()
+            ];
 
-            // Explicitly force PHP to write session data before redirecting
-            session_write_close();
+            $encryptedCookie = encryptCookie($sessionData);
+
+            // Set cookie for 7 days across the whole domain
+            setcookie('user_session', $encryptedCookie, [
+                'expires'  => time() + (86400 * 7),
+                'path'     => '/',
+                'secure'   => true,
+                'httponly' => true,
+                'samesite' => 'Lax'
+            ]);
 
             header("Location: /api/dashboard.php");
             exit;
