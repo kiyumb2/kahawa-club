@@ -26,8 +26,8 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             $_SESSION['first_name'] = $user['first_name'];
             $_SESSION['last_name']  = $user['last_name'];
 
-            // Redirect to root dashboard page (leading slash fixes 404)
-            header("Location: /dashboard.php");
+            // Redirect to dashboard page inside /api/
+            header("Location: /api/dashboard.php");
             exit;
         } else {
             showLoginError("Incorrect phone number or password. Please try again.");
