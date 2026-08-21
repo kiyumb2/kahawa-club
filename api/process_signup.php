@@ -1,25 +1,30 @@
 <?php
-require_once 'db.php';
+// Include central database connection
+require_once __DIR__ . '/db.php';
 
-if ($_SERVER["REQUEST_METHOD"] == "POST") {
+if ($_SERVER["REQUEST_METHOD"] === "POST") {
     try {
         // 1. Capture and sanitize inputs
         $first_name   = trim($_POST['first_name'] ?? '');
         $last_name    = trim($_POST['last_name'] ?? '');
         $phone_number = trim($_POST['phone_number'] ?? '');
         $birthday     = !empty($_POST['birthday']) ? $_POST['birthday'] : null;
-        $password     = password_hash($_POST['password'] ?? '', PASSWORD_DEFAULT);
+        $raw_password = $_POST['password'] ?? '';
 
-        if (empty($first_name) || empty($last_name) || empty($phone_number)) {
+        if (empty($first_name) || empty($last_name) || empty($phone_number) || empty($raw_password)) {
             throw new Exception("Please fill in all required fields.");
         }
+
+        // Hash password securely with BCRYPT
+        $password = password_hash($raw_password, PASSWORD_BCRYPT);
 
         // 2. Generate a unique member code (e.g., KH-A1B2C3)
         $member_code = 'KH-' . strtoupper(substr(md5(uniqid(mt_rand(), true)), 0, 6));
 
-        // 3. Insert user into Supabase PostgreSQL
-        $sql = "INSERT INTO users (first_name, last_name, phone_number, birthday, password, points, member_code) 
-                VALUES (?, ?, ?, ?, ?, 50, ?) RETURNING id";
+        // 3. Insert user into Supabase PostgreSQL (6 parameters total)
+        $sql = "INSERT INTO users (first_name, last_name, phone_number, birthday, password, points, member_code, is_admin) 
+                VALUES (?, ?, ?, ?, ?, 50, ?, FALSE) RETURNING id";
+        
         $stmt = $pdo->prepare($sql);
         $stmt->execute([$first_name, $last_name, $phone_number, $birthday, $password, $member_code]);
         
@@ -73,7 +78,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     } catch (PDOException $e) {
         $errorMessage = "An unexpected error occurred during registration.";
         
-        // Handle unique constraint failure (e.g. phone number already registered)
+        // Handle unique constraint failure (e.g. phone number or member code already registered)
         if ($e->getCode() == '23505') {
             $errorMessage = "That phone number is already registered. Please sign in instead.";
         }
@@ -102,8 +107,37 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             </div>
         </body>
         </html>';
+        exit;
+
     } catch (Exception $e) {
-        echo '<p style="color:red; text-align:center; padding-top: 50px;">' . htmlspecialchars($e->getMessage()) . '</p>';
+        echo '<!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Registration Error</title>
+            <style>
+                body { font-family: Arial, sans-serif; background: #111; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
+                .popup-card { background: #fff; padding: 40px 30px; border-radius: 24px; text-align: center; max-width: 400px; width: 90%; }
+                .icon { font-size: 40px; color: #d9534f; margin-bottom: 15px; }
+                h2 { color: #111; margin-bottom: 10px; }
+                p { color: #666; margin-bottom: 20px; font-size: 14px; }
+                .btn { display: inline-block; padding: 12px 24px; background: #6F4E37; color: white; text-decoration: none; border-radius: 12px; font-weight: bold; }
+            </style>
+        </head>
+        <body>
+            <div class="popup-card">
+                <div class="icon">&#9888;</div>
+                <h2>Registration Failed</h2>
+                <p>' . htmlspecialchars($e->getMessage()) . '</p>
+                <a href="/signup.html" class="btn">Try Again</a>
+            </div>
+        </body>
+        </html>';
+        exit;
     }
+} else {
+    header("Location: /signup.html");
+    exit;
 }
 ?>
