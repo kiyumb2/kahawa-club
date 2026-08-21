@@ -1,14 +1,14 @@
 <?php
 session_start();
 
-// Redirect to login if user session does not exist
+// Redirect to root login if user session does not exist
 if (!isset($_SESSION['user_id'])) {
-    header("Location: index.html");
+    header("Location: /index.html");
     exit;
 }
 
 // Central Supabase PostgreSQL PDO Connection
-require_once 'db.php';
+require_once __DIR__ . '/db.php';
 
 try {
     // 1. Fetch current user data
@@ -18,17 +18,17 @@ try {
 
     if (!$current_user) {
         session_destroy();
-        header("Location: index.html");
+        header("Location: /index.html");
         exit;
     }
 
     $points = $current_user['points'] ?? 0;
-    
+
     // Member Code fallback if not set
     $member_code = !empty($current_user['member_code']) 
         ? $current_user['member_code'] 
         : 'KH-' . strtoupper(substr(md5($current_user['id']), 0, 6));
-        
+
     $full_name = trim(($current_user['first_name'] ?? '') . ' ' . ($current_user['last_name'] ?? ''));
 
     // 2. Fetch recent reward/points transaction history
@@ -50,7 +50,7 @@ try {
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #000; color: #fff; min-height: 100vh; padding-bottom: 80px; }
   .app-container { max-width: 420px; margin: 0 auto; background: #111; min-height: 100vh; position: relative; padding: 20px 16px; }
-  
+
   /* Header */
   .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
   .user-welcome h3 { font-size: 14px; color: #888; font-weight: normal; }
@@ -108,13 +108,13 @@ try {
 <body>
 
 <div class="app-container">
-  
+
   <div class="header">
     <div class="user-welcome">
       <h3>Welcome back,</h3>
       <h1><?php echo htmlspecialchars($full_name); ?></h1>
     </div>
-    <a href="logout.php" class="logout-btn">Log Out</a>
+    <a href="/api/logout.php" class="logout-btn">Log Out</a>
   </div>
 
   <div class="loyalty-card">
@@ -127,7 +127,7 @@ try {
   </div>
 
   <div class="action-grid">
-    <a href="scan_qr.php" class="action-card">
+    <a href="/scan_qr.html" class="action-card">
       <div class="action-icon">📷</div>
       <div class="action-title">Scan In-Store QR</div>
     </a>
@@ -210,7 +210,7 @@ try {
   }
 
   function placeOrder(itemName, price) {
-      fetch('place_order.php', {
+      fetch('/api/place_order.php', {
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
           body: 'item_name=' + encodeURIComponent(itemName) + '&price=' + encodeURIComponent(price)
@@ -230,7 +230,7 @@ try {
   }
 
   function claimFreeCoffee() {
-      fetch('claim_reward.php', {
+      fetch('/api/claim_reward.php', {
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
       })
