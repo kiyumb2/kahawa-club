@@ -2,7 +2,7 @@
 session_start();
 
 // Include central database connection (Supabase PostgreSQL)
-require_once 'db.php';
+require_once __DIR__ . '/db.php';
 
 if ($_SERVER["REQUEST_METHOD"] === "POST") {
     try {
@@ -26,8 +26,8 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             $_SESSION['first_name'] = $user['first_name'];
             $_SESSION['last_name']  = $user['last_name'];
 
-            // Redirect to dashboard page
-            header("Location: dashboard.php");
+            // Redirect to root dashboard page (leading slash fixes 404)
+            header("Location: /dashboard.php");
             exit;
         } else {
             showLoginError("Incorrect phone number or password. Please try again.");
@@ -37,7 +37,8 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         showLoginError("Database Connection Error: " . $e->getMessage());
     }
 } else {
-    header("Location: index.html");
+    // Redirect to root login page if accessed directly
+    header("Location: /index.html");
     exit;
 }
 
@@ -66,7 +67,7 @@ function showLoginError($message) {
             <div class="icon">&#9888;</div>
             <h2>Login Failed</h2>
             <p>' . htmlspecialchars($message) . '</p>
-            <a href="index.html" class="btn">Try Again</a>
+            <a href="/index.html" class="btn">Try Again</a>
         </div>
     </body>
     </html>';
