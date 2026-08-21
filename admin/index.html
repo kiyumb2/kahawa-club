@@ -55,7 +55,7 @@ document.getElementById('adminLoginForm').addEventListener('submit', function(e)
   .then(res => res.json())
   .then(data => {
     if (data.success) {
-      window.location.href = '/admin/dashboard.php';
+   window.location.href = '/admin/admin_dashboard';
     } else {
       errorBox.innerText = data.message || 'Invalid credentials';
       errorBox.style.display = 'block';
