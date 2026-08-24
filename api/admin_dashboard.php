@@ -38,7 +38,6 @@ $currentUser = $userStmt->fetch();
 $isAdmin = ($currentUser && !empty($currentUser['is_admin']) && ($currentUser['is_admin'] === true || $currentUser['is_admin'] === 'TRUE' || $currentUser['is_admin'] == 1));
 
 if (!$isAdmin) {
-    // If not admin, stop access
     die("Access Denied: You do not have permission to access the Admin Panel.");
 }
 
@@ -48,19 +47,28 @@ $messageType = "";
 try {
     // Handle Member Code Actions (Points / Redemptions)
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['member_code'])) {
-        $member_code = trim($_POST['member_code']);
+        $member_code = strtoupper(trim($_POST['member_code']));
         $action = $_POST['action'] ?? '';
+
         if (!empty($member_code)) {
-            $stmt = $pdo->prepare("SELECT * FROM users WHERE member_code = ?");
-            $stmt->execute([$member_code]);
+            // Flexible matching: check exact member_code column or dynamic fallback code
+            $stmt = $pdo->prepare("
+                SELECT * FROM users 
+                WHERE UPPER(TRIM(member_code)) = ? 
+                   OR UPPER(CONCAT('KH-', SUBSTRING(MD5(id::text), 1, 6))) = ?
+            ");
+            $stmt->execute([$member_code, $member_code]);
             $customer = $stmt->fetch();
+
             if ($customer) {
                 if ($action === 'add_points') {
                     $update = $pdo->prepare("UPDATE users SET points = points + 10 WHERE id = ?");
                     $update->execute([$customer['id']]);
 
-                    $hist = $pdo->prepare("INSERT INTO reward_history (user_id, action_type, points_change, description) VALUES (?, 'visit_point', 10, ?)");
-                    $hist->execute([$customer['id'], 'Visit reward added by cashier']);
+                    try {
+                        $hist = $pdo->prepare("INSERT INTO reward_history (user_id, action_type, points_change, description) VALUES (?, 'visit_point', 10, ?)");
+                        $hist->execute([$customer['id'], 'Visit reward added by cashier']);
+                    } catch (Exception $e) {}
 
                     $message = "Successfully added +10 points to " . $customer['first_name'] . " " . $customer['last_name'] . "!";
                     $messageType = "success";
@@ -69,8 +77,10 @@ try {
                         $update = $pdo->prepare("UPDATE users SET points = points - 100 WHERE id = ?");
                         $update->execute([$customer['id']]);
 
-                        $hist = $pdo->prepare("INSERT INTO reward_history (user_id, action_type, points_change, description) VALUES (?, 'redeem_coffee', -100, ?)");
-                        $hist->execute([$customer['id'], 'Redeemed Free Coffee reward']);
+                        try {
+                            $hist = $pdo->prepare("INSERT INTO reward_history (user_id, action_type, points_change, description) VALUES (?, 'redeem_coffee', -100, ?)");
+                            $hist->execute([$customer['id'], 'Redeemed Free Coffee reward']);
+                        } catch (Exception $e) {}
 
                         $message = "Successfully redeemed 100 points for a Free Coffee for " . $customer['first_name'] . "!";
                         $messageType = "success";
@@ -231,7 +241,6 @@ try {
   .finance-item.debt { border-left: 4px solid #e85d04; }
   .finance-amount { font-weight: 900; }
 
-  /* Bottom Navigation Styles */
   .bottom-nav {
     position: absolute;
     bottom: 0;
@@ -299,7 +308,7 @@ try {
     <form method="POST">
       <div class="form-group">
         <label>Member Code</label>
-        <input type="text" name="member_code" placeholder="e.g. KH-FJ8SY2" required autocomplete="off">
+        <input type="text" name="member_code" placeholder="e.g. KH-301454" required autocomplete="off">
       </div>
       <div class="btn-group">
         <button type="submit" name="action" value="add_points" class="btn btn-add">+10 Visit Points</button>
@@ -408,7 +417,6 @@ try {
     </div>
   </div>
 
-  <!-- Bottom Navigation Menu -->
   <nav class="bottom-nav">
     <a href="/api/admin_dashboard" class="nav-item active">
       <span class="icon">⚡</span>
