@@ -6,8 +6,12 @@
   },
   "routes": [
     {
+      "src": "/api/order_process",
+      "dest": "/api/order_process.php"
+    },
+    {
       "src": "/api/process_order",
-      "dest": "/api/oder_process.php"
+      "dest": "/api/order_process.php"
     },
     {
       "src": "/api/process_signup",
