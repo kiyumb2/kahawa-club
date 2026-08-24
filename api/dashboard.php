@@ -660,9 +660,10 @@ try {
         // Close order modal before processing
         closeModal();
 
-      fetch('/api/order_process', {
+    fetch('/api/order_process', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin', // Ensure session cookies are attached
     body: JSON.stringify({
         item_name: itemName,
         price: itemPrice
