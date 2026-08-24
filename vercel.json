@@ -7,7 +7,7 @@
   "routes": [
     {
       "src": "/api/process_order",
-      "dest": "/api/process_order.php"
+      "dest": "/api/oder_process.php"
     },
     {
       "src": "/api/process_signup",
