@@ -4,34 +4,34 @@
       "runtime": "vercel-php@0.9.0"
     }
   },
-  "rewrites": [
+  "routes": [
     {
-      "source": "/api/process_signup",
-      "destination": "/api/process_signup.php"
+      "src": "/api/process_order",
+      "dest": "/api/process_order.php"
     },
     {
-      "source": "/api/process_login",
-      "destination": "/api/process_login.php"
+      "src": "/api/process_signup",
+      "dest": "/api/process_signup.php"
     },
     {
-      "source": "/api/process_order",
-      "destination": "/api/process_order.php"
+      "src": "/api/process_login",
+      "dest": "/api/process_login.php"
     },
     {
-      "source": "/api/logout",
-      "destination": "/api/logout.php"
+      "src": "/api/logout",
+      "dest": "/api/logout.php"
     },
     {
-      "source": "/api/admin_dashboard",
-      "destination": "/api/admin_dashboard.php"
+      "src": "/api/admin_dashboard",
+      "dest": "/api/admin_dashboard.php"
     },
     {
-      "source": "/api/dashboard",
-      "destination": "/api/dashboard.php"
+      "src": "/api/dashboard",
+      "dest": "/api/dashboard.php"
     },
     {
-      "source": "/api/(.*)",
-      "destination": "/api/$1.php"
+      "src": "/api/(.*)",
+      "dest": "/api/$1.php"
     }
   ]
 }
