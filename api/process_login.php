@@ -99,7 +99,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                     'samesite' => 'Lax'
                 ]);
 
-                // Redirect admins to admin dashboard and regular users to customer dashboard
+                // Clear traditional headers and send location redirect
                 if ($isAdmin) {
                     header("Location: /api/admin_dashboard");
                 } else {
