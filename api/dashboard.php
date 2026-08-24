@@ -660,7 +660,7 @@ try {
         // Close order modal before processing
         closeModal();
 
-        fetch('/api/process_order', {
+       fetch('/api/process_order.php', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
