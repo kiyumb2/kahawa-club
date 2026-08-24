@@ -660,7 +660,7 @@ try {
         // Close order modal before processing
         closeModal();
 
-        fetch('/api/oder_process.php', {
+        fetch('/api/oder_process', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
