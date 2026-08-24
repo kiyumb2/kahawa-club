@@ -596,7 +596,7 @@ try {
         </div>
     </div>
   </div>
-  <!-- Bottom App Navigation Bar (Fixed with Rewards Click Trigger) -->
+  <!-- Bottom App Navigation Bar -->
   <div class="bottom-nav">
     <a href="/api/dashboard" class="nav-item active">
       <span class="nav-icon">🏠</span>
@@ -660,7 +660,7 @@ try {
         // Close order modal before processing
         closeModal();
 
-       fetch('/api/process_order.php', {
+        fetch('/api/process_order', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -668,17 +668,26 @@ try {
                 price: itemPrice
             })
         })
-        .then(response => response.json())
+        .then(async response => {
+            const isJson = response.headers.get('content-type')?.includes('application/json');
+            const data = isJson ? await response.json() : null;
+
+            if (!response.ok) {
+                const errorMsg = (data && data.message) || `Server Error (${response.status})`;
+                return Promise.reject(errorMsg);
+            }
+            return data;
+        })
         .then(data => {
-            if (data.success) {
+            if (data && data.success) {
                 showPopup('Order Confirmed!', 'Your ' + itemName + ' has been successfully ordered and logged.', true, true);
             } else {
-                showPopup('Order Failed', data.message || 'Error processing order.', false);
+                showPopup('Order Failed', (data && data.message) || 'Error processing order.', false);
             }
         })
         .catch(error => {
             console.error('Error:', error);
-            showPopup('Error', 'An error occurred while processing your order.', false);
+            showPopup('Error', typeof error === 'string' ? error : 'An error occurred while processing your order.', false);
         });
     }
     function showAppMessage(title, text, icon = '☕') {
