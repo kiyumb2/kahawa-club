@@ -39,18 +39,15 @@ try {
     }
 
     $points = $current_user['points'] ?? 0;
-
     $member_code = !empty($current_user['member_code']) 
         ? $current_user['member_code'] 
         : 'KH-' . strtoupper(substr(md5($current_user['id']), 0, 6));
-
     $full_name = trim(($current_user['first_name'] ?? '') . ' ' . ($current_user['last_name'] ?? ''));
 
     // Fetch reward history
     $historyStmt = $pdo->prepare("SELECT * FROM reward_history WHERE user_id = ? ORDER BY created_at DESC LIMIT 20");
     $historyStmt->execute([$user_id]);
     $rewardHistory = $historyStmt->fetchAll(PDO::FETCH_ASSOC);
-
 } catch (PDOException $e) {
     die("Database Connection failed: " . htmlspecialchars($e->getMessage()));
 }
@@ -426,7 +423,6 @@ try {
         <button class="popup-btn" onclick="closeCustomPopup()">Continue</button>
     </div>
 </div>
-
 <div class="app-container">
   <!-- Top App Header -->
   <div class="app-header">
@@ -441,7 +437,6 @@ try {
       ⭐ <?php echo $points; ?>
     </div>
   </div>
-
   <!-- Main Scrollable Screen Content -->
   <div class="app-content">
     <!-- Automated Reward Banner -->
@@ -482,7 +477,6 @@ try {
         </div>
       </div>
     </div>
-
     <!-- Offers for You Section -->
     <div class="section-header">
       <div class="section-title">Offers for You</div>
@@ -500,7 +494,6 @@ try {
         <div class="offer-desc">አንድ ሲኒ ቡና ሲጠጡ 10 ነፃ ኮይን ያገኛሉ</div>
       </div>
     </div>
-
     <!-- Popular Today Slide Panel (Clickable to Buy) -->
     <div class="section-header">
       <div class="section-title">Our menu</div>
@@ -557,7 +550,6 @@ try {
       </div>
     </div>
   </div>
-
   <!-- Buy Confirmation Modal Popup -->
   <div class="modal-overlay" id="buyModal">
     <div class="modal-card">
@@ -568,7 +560,6 @@ try {
       <button class="modal-cancel" onclick="closeModal()">Cancel</button>
     </div>
   </div>
-
   <!-- Custom App Message Popup Modal -->
   <div class="modal-overlay" id="appMessageModal">
     <div class="modal-card">
@@ -578,7 +569,6 @@ try {
       <button class="modal-btn" onclick="closeMessageModal()">Got it!</button>
     </div>
   </div>
-
   <!-- Reward History Modal Overlay -->
   <div id="rewardsModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); z-index:1000; justify-content:center; align-items:center;">
     <div style="background:#F9F6F0; width:90%; max-width:400px; border-radius:20px; padding:20px; max-height:80vh; overflow-y:auto; box-shadow:0 10px 25px rgba(0,0,0,0.3);">
@@ -606,26 +596,22 @@ try {
         </div>
     </div>
   </div>
-
   <!-- Bottom App Navigation Bar (Fixed with Rewards Click Trigger) -->
   <div class="bottom-nav">
-    <a href="/api/dashboard.php" class="nav-item active">
+    <a href="/api/dashboard" class="nav-item active">
       <span class="nav-icon">🏠</span>
       <span class="nav-label">Home</span>
     </a>
-
     <button onclick="openRewardsModal()" class="nav-item">
       <span class="nav-icon">🎁</span>
       <span class="nav-label">Rewards</span>
     </button>
-
-    <a href="/api/logout.php" class="nav-item">
+    <a href="/api/logout" class="nav-item">
       <span class="nav-icon">🚪</span>
       <span class="nav-label">Logout</span>
     </a>
   </div>
 </div>
-
 <script>
     function openRewardsModal() {
         document.getElementById('rewardsModal').style.display = 'flex';
@@ -633,7 +619,6 @@ try {
     function closeRewardsModal() {
         document.getElementById('rewardsModal').style.display = 'none';
     }
-
     function openModal(name, price, emoji) {
         document.getElementById('modalTitle').innerText = name;
         document.getElementById('modalPrice').innerText = price;
@@ -658,8 +643,8 @@ try {
         }
     }
     function confirmPurchase() {
-        const itemNameEl = document.querySelector('.modal-title');
-        const itemPriceEl = document.querySelector('.modal-price');
+        const itemNameEl = document.querySelector('#modalTitle');
+        const itemPriceEl = document.querySelector('#modalPrice');
         if (!itemNameEl || !itemPriceEl) {
             showPopup('Error', 'Could not find item details in the modal.', false);
             return;
@@ -671,17 +656,24 @@ try {
             showPopup('Error', 'Invalid item name or price detected.', false);
             return;
         }
-        fetch('/api/place_order.php', {
+
+        // Close order modal before processing
+        closeModal();
+
+        fetch('/api/process_order', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: 'item_name=' + encodeURIComponent(itemName) + '&price=' + encodeURIComponent(itemPrice)
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                item_name: itemName,
+                price: itemPrice
+            })
         })
         .then(response => response.json())
         .then(data => {
             if (data.success) {
                 showPopup('Order Confirmed!', 'Your ' + itemName + ' has been successfully ordered and logged.', true, true);
             } else {
-                showPopup('Order Failed', data.message, false);
+                showPopup('Order Failed', data.message || 'Error processing order.', false);
             }
         })
         .catch(error => {
@@ -689,7 +681,6 @@ try {
             showPopup('Error', 'An error occurred while processing your order.', false);
         });
     }
-
     function showAppMessage(title, text, icon = '☕') {
         document.getElementById('msgModalTitle').innerText = title;
         document.getElementById('msgModalText').innerText = text;
@@ -699,7 +690,6 @@ try {
     function closeMessageModal() {
         document.getElementById('appMessageModal').classList.remove('active');
     }
-
     function claimFreeCoffee() {
         fetch('/api/claim_reward.php', {
             method: 'POST',
