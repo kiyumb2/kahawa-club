@@ -660,14 +660,14 @@ try {
         // Close order modal before processing
         closeModal();
 
-        fetch('/api/process_order', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                item_name: itemName,
-                price: itemPrice
-            })
-        })
+       fetch('/api/process_order.php', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+        item_name: itemName,
+        price: itemPrice
+    })
+})
         .then(async response => {
             const isJson = response.headers.get('content-type')?.includes('application/json');
             const data = isJson ? await response.json() : null;
