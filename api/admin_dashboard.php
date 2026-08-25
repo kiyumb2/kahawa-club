@@ -1,12 +1,22 @@
 <?php
-// Include central database connection (Supabase PostgreSQL)
+// Set local PHP time zone to match your local PC time
+date_default_timezone_set('Africa/Addis_Ababa');
+
+// Include central database connection (Supabase PostgreSQL)[cite: 1]
 require_once __DIR__ . '/db.php';
 
-// Define secret key for cookie decryption
+// Force PostgreSQL session to use the local time zone for query timestamps
+try {
+    $pdo->exec("SET TIME ZONE 'Africa/Addis_Ababa'");
+} catch (Exception $e) {
+    // Fallback if database-level setting isn't permitted
+}
+
+// Define secret key for cookie decryption[cite: 1]
 define('ENCRYPTION_KEY', 'kahawa_secret_key_change_this_123456!');
 
 /**
- * Decrypt cookie session payload
+ * Decrypt cookie session payload[cite: 1]
  */
 function decryptCookie($cookie) {
     try {
@@ -21,27 +31,25 @@ function decryptCookie($cookie) {
     }
 }
 
-// Check session / authentication
+// Check session / authentication[cite: 1]
 $session = isset($_COOKIE['user_session']) ? decryptCookie($_COOKIE['user_session']) : null;
-
 if (!$session || empty($session['user_id'])) {
     header("Location: /index.html");
     exit;
 }
 
-// Fetch logged-in user details to verify role
+// Fetch logged-in user details to verify role[cite: 1]
 $userStmt = $pdo->prepare("SELECT * FROM users WHERE id = ?");
 $userStmt->execute([$session['user_id']]);
 $currentUser = $userStmt->fetch();
 
-// Check if user is admin using the is_admin boolean column
+// Check if user is admin using the is_admin boolean column[cite: 1]
 $isAdmin = ($currentUser && !empty($currentUser['is_admin']) && ($currentUser['is_admin'] === true || $currentUser['is_admin'] === 'TRUE' || $currentUser['is_admin'] == 1));
-
 if (!$isAdmin) {
     die("Access Denied: You do not have permission to access the Admin Panel.");
 }
 
-// AJAX Polling Endpoint for Real-time Sound Alerts
+// AJAX Polling Endpoint for Real-time Sound Alerts[cite: 1]
 if (isset($_GET['api']) && $_GET['api'] === 'check_orders') {
     header('Content-Type: application/json');
     $countStmt = $pdo->query("SELECT COUNT(*) FROM orders WHERE status = 'pending'");
@@ -54,40 +62,33 @@ $message = "";
 $messageType = "";
 
 try {
-    // Handle Direct Order Request Actions (Approve / Reject)
+    // Handle Direct Order Request Actions (Approve / Reject)[cite: 1]
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['order_action'])) {
         $orderId = intval($_POST['order_id'] ?? 0);
         $action = $_POST['order_action'];
-
         if ($orderId > 0) {
             $orderQuery = $pdo->prepare("SELECT o.*, u.first_name, u.last_name FROM orders o JOIN users u ON o.user_id = u.id WHERE o.id = ? AND o.status = 'pending'");
             $orderQuery->execute([$orderId]);
             $orderReq = $orderQuery->fetch(PDO::FETCH_ASSOC);
-
             if ($orderReq) {
                 if ($action === 'approve') {
                     $pdo->beginTransaction();
-
-                    // 1. Update order status to approved
+                    // 1. Update order status to approved[cite: 1]
                     $upOrder = $pdo->prepare("UPDATE orders SET status = 'approved' WHERE id = ?");
                     $upOrder->execute([$orderId]);
-
-                    // 2. Add points to user
+                    // 2. Add points to user[cite: 1]
                     $earnedPoints = 10;
                     $upUser = $pdo->prepare("UPDATE users SET points = points + ? WHERE id = ?");
                     $upUser->execute([$earnedPoints, $orderReq['user_id']]);
-
-                    // 3. Log point gain in reward history
+                    // 3. Log point gain in reward history[cite: 1]
                     $hist = $pdo->prepare("INSERT INTO reward_history (user_id, action_type, points_change, description, created_at) VALUES (?, 'order_approval', ?, ?, NOW())");
                     $hist->execute([$orderReq['user_id'], $earnedPoints, 'Points earned for approved order: ' . $orderReq['item_name']]);
-
                     $pdo->commit();
                     $message = "Approved order for " . htmlspecialchars($orderReq['first_name'] . ' ' . $orderReq['last_name']) . "! Points added and revenue updated.";
                     $messageType = "success";
                 } elseif ($action === 'reject') {
                     $upOrder = $pdo->prepare("UPDATE orders SET status = 'rejected' WHERE id = ?");
                     $upOrder->execute([$orderId]);
-
                     $message = "Order request rejected successfully.";
                     $messageType = "success";
                 }
@@ -98,36 +99,29 @@ try {
         }
     }
 
-    // Handle Direct Point Request Actions (Approve / Reject)
+    // Handle Direct Point Request Actions (Approve / Reject)[cite: 1]
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['request_action'])) {
         $requestId = intval($_POST['request_id'] ?? 0);
         $action = $_POST['request_action'];
-
         if ($requestId > 0) {
             $reqStmt = $pdo->prepare("SELECT pr.*, u.first_name, u.last_name FROM point_requests pr JOIN users u ON pr.user_id = u.id WHERE pr.id = ? AND pr.status = 'pending'");
             $reqStmt->execute([$requestId]);
             $pointReq = $reqStmt->fetch(PDO::FETCH_ASSOC);
-
             if ($pointReq) {
                 if ($action === 'approve') {
                     $pdo->beginTransaction();
-
                     $upReq = $pdo->prepare("UPDATE point_requests SET status = 'approved' WHERE id = ?");
                     $upReq->execute([$requestId]);
-
                     $upUser = $pdo->prepare("UPDATE users SET points = points + 10 WHERE id = ?");
                     $upUser->execute([$pointReq['user_id']]);
-
                     $hist = $pdo->prepare("INSERT INTO reward_history (user_id, action_type, points_change, description, created_at) VALUES (?, 'visit_point', 10, ?, NOW())");
                     $hist->execute([$pointReq['user_id'], 'Counter Visit Request Approved by Admin']);
-
                     $pdo->commit();
                     $message = "Approved +10 points request for " . htmlspecialchars($pointReq['first_name'] . ' ' . $pointReq['last_name']) . "!";
                     $messageType = "success";
                 } elseif ($action === 'reject') {
                     $upReq = $pdo->prepare("UPDATE point_requests SET status = 'rejected' WHERE id = ?");
                     $upReq->execute([$requestId]);
-
                     $message = "Request rejected successfully.";
                     $messageType = "success";
                 }
@@ -138,11 +132,10 @@ try {
         }
     }
 
-    // Handle Member Code Actions (Manual Points / Redemptions)
+    // Handle Member Code Actions (Manual Points / Redemptions)[cite: 1]
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['member_code'])) {
         $member_code = strtoupper(trim($_POST['member_code']));
         $action = $_POST['action'] ?? '';
-
         if (!empty($member_code)) {
             $stmt = $pdo->prepare("
                 SELECT * FROM users 
@@ -151,17 +144,14 @@ try {
             ");
             $stmt->execute([$member_code, $member_code]);
             $customer = $stmt->fetch();
-
             if ($customer) {
                 if ($action === 'add_points') {
                     $update = $pdo->prepare("UPDATE users SET points = points + 10 WHERE id = ?");
                     $update->execute([$customer['id']]);
-
                     try {
                         $hist = $pdo->prepare("INSERT INTO reward_history (user_id, action_type, points_change, description, created_at) VALUES (?, 'visit_point', 10, ?, NOW())");
                         $hist->execute([$customer['id'], 'Visit reward added by cashier']);
                     } catch (Exception $e) {}
-
                     $message = "Successfully added +10 points to " . htmlspecialchars($customer['first_name'] . " " . $customer['last_name']) . "!";
                     $messageType = "success";
                 } elseif ($action === 'redeem_coffee') {
@@ -169,12 +159,10 @@ try {
                         $previousPoints = (int)$customer['points'];
                         $update = $pdo->prepare("UPDATE users SET points = 0 WHERE id = ?");
                         $update->execute([$customer['id']]);
-
                         try {
                             $hist = $pdo->prepare("INSERT INTO reward_history (user_id, action_type, points_change, description, created_at) VALUES (?, 'redeem_coffee', ?, ?, NOW())");
                             $hist->execute([$customer['id'], -$previousPoints, 'Redeemed Free Coffee reward (Points reset to 0)']);
                         } catch (Exception $e) {}
-
                         $message = "Successfully redeemed Free Coffee for " . htmlspecialchars($customer['first_name']) . "! Points reset to 0.";
                         $messageType = "success";
                     } else {
@@ -189,7 +177,7 @@ try {
         }
     }
 
-    // Handle Financial Records
+    // Handle Financial Records[cite: 1]
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['finance_action'])) {
         $desc = trim($_POST['description'] ?? '');
         $type = $_POST['record_type'] ?? '';
@@ -203,7 +191,7 @@ try {
         }
     }
 
-    // Fetch Daily Analytics
+    // Fetch Daily Analytics[cite: 1]
     $today = date('Y-m-d');
     $ordersTodayStmt = $pdo->prepare("SELECT COUNT(*) as total_orders, COALESCE(SUM(price), 0) as total_revenue FROM orders WHERE status = 'approved' AND DATE(order_date) = ?");
     $ordersTodayStmt->execute([$today]);
@@ -212,7 +200,7 @@ try {
     $totalOrders = $analytics['total_orders'] ?? 0;
     $totalRevenue = $analytics['total_revenue'] ?? 0.00;
 
-    // Fetch Pending Item Order Requests
+    // Fetch Pending Item Order Requests[cite: 1]
     $pendingOrdersStmt = $pdo->query("
         SELECT o.*, u.first_name, u.last_name, u.member_code 
         FROM orders o 
@@ -222,7 +210,7 @@ try {
     ");
     $pendingOrders = $pendingOrdersStmt->fetchAll(PDO::FETCH_ASSOC);
 
-    // Fetch Pending Point Requests
+    // Fetch Pending Point Requests[cite: 1]
     $pendingRequestsStmt = $pdo->query("
         SELECT pr.*, u.first_name, u.last_name, u.member_code 
         FROM point_requests pr 
@@ -232,7 +220,7 @@ try {
     ");
     $pendingRequests = $pendingRequestsStmt->fetchAll(PDO::FETCH_ASSOC);
 
-    // Fetch Free Coffee Claimers History
+    // Fetch Free Coffee Claimers History[cite: 1]
     $coffeeClaimersStmt = $pdo->query("
         SELECT rh.*, u.first_name, u.last_name, u.member_code 
         FROM reward_history rh 
@@ -243,11 +231,11 @@ try {
     ");
     $coffeeClaimers = $coffeeClaimersStmt->fetchAll(PDO::FETCH_ASSOC);
 
-    // Fetch Recent App Orders
+    // Fetch Recent App Orders[cite: 1]
     $ordersStmt = $pdo->query("SELECT o.*, u.first_name, u.last_name FROM orders o JOIN users u ON o.user_id = u.id ORDER BY o.order_date DESC LIMIT 10");
     $recentOrders = $ordersStmt->fetchAll();
 
-    // Fetch Financial Summary
+    // Fetch Financial Summary[cite: 1]
     $financesStmt = $pdo->query("SELECT * FROM finances ORDER BY record_date DESC, id DESC LIMIT 15");
     $financesList = $financesStmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -266,7 +254,7 @@ try {
     $grandIncome = $totalRevenue + $manualIncome;
     $netProfit = $grandIncome - $grandFees;
 
-    // Sales Chart Data
+    // Sales Chart Data[cite: 1]
     $chartStmt = $pdo->query("
         SELECT DATE(order_date) as sale_date, SUM(price) as daily_total 
         FROM orders 
@@ -316,7 +304,6 @@ try {
     background: #2d6a4f; color: white; border: none; padding: 6px 12px;
     border-radius: 8px; font-size: 10px; font-weight: bold; cursor: pointer;
   }
-
   .analytics-grid { display: flex; gap: 10px; margin-bottom: 16px; }
   .analytic-card { flex: 1; background: #fff; padding: 12px; border-radius: 16px; text-align: center; box-shadow: 0 4px 10px rgba(0,0,0,0.03); }
   .analytic-card h3 { font-size: 16px; font-weight: 900; color: #6f4e37; }
@@ -348,7 +335,6 @@ try {
   .request-info span { font-size: 10px; color: #777; }
   .request-actions { display: flex; gap: 6px; }
   .btn-sm { padding: 6px 10px; font-size: 10px; border-radius: 6px; border: none; font-weight: bold; cursor: pointer; color: white; }
-
   .orders-list { max-height: 180px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
   .order-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 10px; background: #f9f9f9; border-radius: 10px; font-size: 12px; }
   .order-info strong { display: block; color: #111; }
@@ -358,7 +344,6 @@ try {
   .badge-approved { background: #d4edda; color: #155724; font-size: 9px; font-weight: bold; padding: 2px 6px; border-radius: 4px; }
   .badge-rejected { background: #f8d7da; color: #721c24; font-size: 9px; font-weight: bold; padding: 2px 6px; border-radius: 4px; }
   .badge-claimed { background: #c49a6c; color: #fff; font-size: 9px; font-weight: bold; padding: 2px 6px; border-radius: 4px; }
-
   .chart-card { background: #fff; padding: 16px; border-radius: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.03); margin-bottom: 16px; }
   .chart-card h2 { font-size: 14px; font-weight: 900; color: #111; margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center; }
   .chart-container { display: flex; align-items: flex-end; justify-content: space-between; height: 120px; padding-top: 20px; border-bottom: 2px solid #eee; gap: 8px; }
@@ -386,7 +371,6 @@ try {
   .finance-item.fee { border-left: 4px solid #b7094c; }
   .finance-item.debt { border-left: 4px solid #e85d04; }
   .finance-amount { font-weight: 900; }
-
   .bottom-nav {
     position: absolute; bottom: 0; left: 0; right: 0; height: 65px; background: #ffffff;
     border-bottom-left-radius: 22px; border-bottom-right-radius: 22px; display: flex;
@@ -399,19 +383,15 @@ try {
 </style>
 </head>
 <body>
-
 <div class="app-container">
-
   <div class="header">
     <span>Management & Cashier Console</span>
     <h1>KAHAWA ADMIN</h1>
   </div>
-
   <div class="sound-banner" id="soundBanner">
     <span>🔔 Order Ring Alert</span>
     <button class="sound-btn" id="enableSoundBtn" onclick="enableAudioAlerts()">Enable Ring Sound</button>
   </div>
-
   <div class="analytics-grid">
     <div class="analytic-card">
       <h3><?php echo $totalOrders; ?></h3>
@@ -422,13 +402,11 @@ try {
       <p>Revenue Today</p>
     </div>
   </div>
-
   <?php if (!empty($message)): ?>
     <div class="alert <?php echo $messageType; ?>">
       <?php echo htmlspecialchars($message); ?>
     </div>
   <?php endif; ?>
-
   <!-- Pending Order Requests Card -->
   <div class="card">
     <h2>Pending Order Requests ☕ <span>(<span id="orderCountDisplay"><?php echo count($pendingOrders); ?></span>)</span></h2>
@@ -457,7 +435,6 @@ try {
       <?php endif; ?>
     </div>
   </div>
-
   <!-- Pending Point Requests Card -->
   <div class="card">
     <h2>Pending Counter Point Requests 📍 <span>(<?php echo count($pendingRequests); ?>)</span></h2>
@@ -486,7 +463,6 @@ try {
       <?php endif; ?>
     </div>
   </div>
-
   <!-- Free Coffee Claimers List Card -->
   <div class="card">
     <h2>Free Coffee Claimers 🎁 <span>(<?php echo count($coffeeClaimers); ?>)</span></h2>
@@ -508,7 +484,6 @@ try {
       <?php endif; ?>
     </div>
   </div>
-
   <div class="card">
     <h2>Manual Customer Terminal</h2>
     <form method="POST">
@@ -522,7 +497,6 @@ try {
       </div>
     </form>
   </div>
-
   <div class="card">
     <h2>Live App Orders <span>🛒</span></h2>
     <div class="orders-list">
@@ -549,7 +523,6 @@ try {
       <?php endif; ?>
     </div>
   </div>
-
   <div class="chart-card">
     <h2>Sales Trend (Last 5 Days) <span>📊</span></h2>
     <div class="chart-container">
@@ -572,7 +545,6 @@ try {
       <?php endif; ?>
     </div>
   </div>
-
   <div class="card">
     <h2>Financial Overview <span>💰</span></h2>
     <div class="finance-grid">
@@ -593,7 +565,6 @@ try {
         <span>Total Debt</span>
       </div>
     </div>
-
     <form method="POST" class="finance-form">
       <input type="hidden" name="finance_action" value="1">
       <div class="finance-row">
@@ -610,7 +581,6 @@ try {
       </div>
       <button type="submit" class="btn btn-add" style="width: 100%; padding: 8px; font-size: 11px;">Add Financial Record</button>
     </form>
-
     <div class="finances-list">
       <?php if (count($financesList) > 0): ?>
         <?php foreach ($financesList as $rec): ?>
@@ -629,7 +599,6 @@ try {
       <?php endif; ?>
     </div>
   </div>
-
   <nav class="bottom-nav">
     <a href="/api/admin_dashboard" class="nav-item active">
       <span class="icon">⚡</span>
@@ -644,14 +613,11 @@ try {
       <span>Logout</span>
     </a>
   </nav>
-
 </div>
-
 <script>
 let audioCtx = null;
 let currentPendingCount = <?php echo count($pendingOrders); ?>;
 let isAudioEnabled = false;
-
 function playChimeRing() {
   if (!isAudioEnabled) return;
   
@@ -663,9 +629,7 @@ function playChimeRing() {
     if (audioCtx.state === 'suspended') {
       audioCtx.resume();
     }
-
     const now = audioCtx.currentTime;
-
     const osc1 = audioCtx.createOscillator();
     const gain1 = audioCtx.createGain();
     osc1.type = 'sine';
@@ -676,7 +640,6 @@ function playChimeRing() {
     gain1.connect(audioCtx.destination);
     osc1.start(now);
     osc1.stop(now + 0.4);
-
     const osc2 = audioCtx.createOscillator();
     const gain2 = audioCtx.createGain();
     osc2.type = 'sine';
@@ -691,7 +654,6 @@ function playChimeRing() {
     console.error("Audio playback error:", e);
   }
 }
-
 function enableAudioAlerts() {
   if (!audioCtx) {
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -704,19 +666,16 @@ function enableAudioAlerts() {
     playChimeRing();
   });
 }
-
 document.body.addEventListener('click', () => {
   if (!isAudioEnabled) {
     enableAudioAlerts();
   }
 }, { once: true });
-
 if (currentPendingCount > 0) {
   setTimeout(() => {
     playChimeRing();
   }, 1000);
 }
-
 setInterval(() => {
   fetch('?api=check_orders')
     .then(res => res.json())
@@ -738,6 +697,5 @@ setInterval(() => {
     .catch(err => console.log('Polling check error:', err));
 }, 5000);
 </script>
-
 </body>
 </html>
