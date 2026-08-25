@@ -41,6 +41,15 @@ if (!$isAdmin) {
     die("Access Denied: You do not have permission to access the Admin Panel.");
 }
 
+// AJAX Polling Endpoint for Real-time Sound Alerts
+if (isset($_GET['api']) && $_GET['api'] === 'check_orders') {
+    header('Content-Type: application/json');
+    $countStmt = $pdo->query("SELECT COUNT(*) FROM orders WHERE status = 'pending'");
+    $pendingCount = (int)$countStmt->fetchColumn();
+    echo json_encode(['pending_orders' => $pendingCount]);
+    exit;
+}
+
 $message = "";
 $messageType = "";
 
@@ -63,7 +72,7 @@ try {
                     $upOrder = $pdo->prepare("UPDATE orders SET status = 'approved' WHERE id = ?");
                     $upOrder->execute([$orderId]);
 
-                    // 2. Add points to user (e.g., +10 points per approved order)
+                    // 2. Add points to user
                     $earnedPoints = 10;
                     $upUser = $pdo->prepare("UPDATE users SET points = points + ? WHERE id = ?");
                     $upUser->execute([$earnedPoints, $orderReq['user_id']]);
@@ -103,15 +112,12 @@ try {
                 if ($action === 'approve') {
                     $pdo->beginTransaction();
 
-                    // Update request status
                     $upReq = $pdo->prepare("UPDATE point_requests SET status = 'approved' WHERE id = ?");
                     $upReq->execute([$requestId]);
 
-                    // Add 10 points to user
                     $upUser = $pdo->prepare("UPDATE users SET points = points + 10 WHERE id = ?");
                     $upUser->execute([$pointReq['user_id']]);
 
-                    // Log in reward history
                     $hist = $pdo->prepare("INSERT INTO reward_history (user_id, action_type, points_change, description, created_at) VALUES (?, 'visit_point', 10, ?, NOW())");
                     $hist->execute([$pointReq['user_id'], 'Counter Visit Request Approved by Admin']);
 
@@ -183,7 +189,7 @@ try {
         }
     }
 
-    // Handle New Financial Record Submissions
+    // Handle Financial Records
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['finance_action'])) {
         $desc = trim($_POST['description'] ?? '');
         $type = $_POST['record_type'] ?? '';
@@ -197,7 +203,7 @@ try {
         }
     }
 
-    // Fetch Daily Analytics (Approved Orders Only for Today's Revenue)
+    // Fetch Daily Analytics
     $today = date('Y-m-d');
     $ordersTodayStmt = $pdo->prepare("SELECT COUNT(*) as total_orders, COALESCE(SUM(price), 0) as total_revenue FROM orders WHERE status = 'approved' AND DATE(order_date) = ?");
     $ordersTodayStmt->execute([$today]);
@@ -230,7 +236,7 @@ try {
     $ordersStmt = $pdo->query("SELECT o.*, u.first_name, u.last_name FROM orders o JOIN users u ON o.user_id = u.id ORDER BY o.order_date DESC LIMIT 10");
     $recentOrders = $ordersStmt->fetchAll();
 
-    // Fetch Financial Summary & Records
+    // Fetch Financial Summary
     $financesStmt = $pdo->query("SELECT * FROM finances ORDER BY record_date DESC, id DESC LIMIT 15");
     $financesList = $financesStmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -249,7 +255,7 @@ try {
     $grandIncome = $totalRevenue + $manualIncome;
     $netProfit = $grandIncome - $grandFees;
 
-    // Fetch last 5 days sales for chart (Approved Orders Only)
+    // Sales Chart Data
     $chartStmt = $pdo->query("
         SELECT DATE(order_date) as sale_date, SUM(price) as daily_total 
         FROM orders 
@@ -291,6 +297,16 @@ try {
   .header h1 { font-size: 18px; font-weight: 900; color: #111; letter-spacing: 1px; }
   .header span { font-size: 10px; color: #c49a6c; text-transform: uppercase; letter-spacing: 2px; display: block; }
   
+  /* Sound Notification Control Banner */
+  .sound-banner {
+    background: #6f4e37; color: white; border-radius: 12px; padding: 10px 14px;
+    margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; font-size: 11px; font-weight: bold;
+  }
+  .sound-btn {
+    background: #2d6a4f; color: white; border: none; padding: 6px 12px;
+    border-radius: 8px; font-size: 10px; font-weight: bold; cursor: pointer;
+  }
+
   .analytics-grid { display: flex; gap: 10px; margin-bottom: 16px; }
   .analytic-card { flex: 1; background: #fff; padding: 12px; border-radius: 16px; text-align: center; box-shadow: 0 4px 10px rgba(0,0,0,0.03); }
   .analytic-card h3 { font-size: 16px; font-weight: 900; color: #6f4e37; }
@@ -361,39 +377,14 @@ try {
   .finance-amount { font-weight: 900; }
 
   .bottom-nav {
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    height: 65px;
-    background: #ffffff;
-    border-bottom-left-radius: 22px;
-    border-bottom-right-radius: 22px;
-    display: flex;
-    justify-content: space-around;
-    align-items: center;
-    border-top: 1px solid #eee;
-    box-shadow: 0 -4px 15px rgba(0,0,0,0.03);
+    position: absolute; bottom: 0; left: 0; right: 0; height: 65px; background: #ffffff;
+    border-bottom-left-radius: 22px; border-bottom-right-radius: 22px; display: flex;
+    justify-content: space-around; align-items: center; border-top: 1px solid #eee; box-shadow: 0 -4px 15px rgba(0,0,0,0.03);
   }
-  .nav-item {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    text-decoration: none;
-    color: #888;
-    font-size: 10px;
-    font-weight: bold;
-    gap: 4px;
-  }
-  .nav-item.active {
-    color: #6f4e37;
-  }
-  .nav-item .icon {
-    font-size: 18px;
-  }
-  .nav-item.logout {
-    color: #d9534f;
-  }
+  .nav-item { display: flex; flex-direction: column; align-items: center; text-decoration: none; color: #888; font-size: 10px; font-weight: bold; gap: 4px; }
+  .nav-item.active { color: #6f4e37; }
+  .nav-item .icon { font-size: 18px; }
+  .nav-item.logout { color: #d9534f; }
 </style>
 </head>
 <body>
@@ -403,6 +394,12 @@ try {
   <div class="header">
     <span>Management & Cashier Console</span>
     <h1>KAHAWA ADMIN</h1>
+  </div>
+
+  <!-- Real-time Audio Enable Banner -->
+  <div class="sound-banner" id="soundBanner">
+    <span>🔔 Order Ring Alert</span>
+    <button class="sound-btn" id="enableSoundBtn" onclick="enableAudioAlerts()">Enable Ring Sound</button>
   </div>
 
   <div class="analytics-grid">
@@ -424,7 +421,7 @@ try {
 
   <!-- Pending Order Requests Card -->
   <div class="card">
-    <h2>Pending Order Requests ☕ <span>(<?php echo count($pendingOrders); ?>)</span></h2>
+    <h2>Pending Order Requests ☕ <span>(<span id="orderCountDisplay"><?php echo count($pendingOrders); ?></span>)</span></h2>
     <div class="requests-list">
       <?php if (count($pendingOrders) > 0): ?>
         <?php foreach ($pendingOrders as $pOrder): ?>
@@ -546,7 +543,6 @@ try {
 
   <div class="card">
     <h2>Financial Overview <span>💰</span></h2>
-    
     <div class="finance-grid">
       <div class="finance-badge income">
         <h4>+ETB <?php echo number_format($grandIncome, 2); ?></h4>
@@ -618,5 +614,107 @@ try {
   </nav>
 
 </div>
+
+<script>
+let audioCtx = null;
+let currentPendingCount = <?php echo count($pendingOrders); ?>;
+let isAudioEnabled = false;
+
+// Function to synthesized "Ding-Ding" Ring Bell Sound using Web Audio API
+function playChimeRing() {
+  if (!isAudioEnabled) return;
+  
+  try {
+    if (!audioCtx) {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    
+    if (audioCtx.state === 'suspended') {
+      audioCtx.resume();
+    }
+
+    const now = audioCtx.currentTime;
+
+    // Beep 1
+    const osc1 = audioCtx.createOscillator();
+    const gain1 = audioCtx.createGain();
+    osc1.type = 'sine';
+    osc1.frequency.setValueAtTime(880, now); // A5 note
+    gain1.gain.setValueAtTime(0.3, now);
+    gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+    osc1.connect(gain1);
+    gain1.connect(audioCtx.destination);
+    osc1.start(now);
+    osc1.stop(now + 0.4);
+
+    // Beep 2
+    const osc2 = audioCtx.createOscillator();
+    const gain2 = audioCtx.createGain();
+    osc2.type = 'sine';
+    osc2.frequency.setValueAtTime(1320, now + 0.15); // E6 note
+    gain2.gain.setValueAtTime(0.4, now + 0.15);
+    gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.6);
+    osc2.connect(gain2);
+    gain2.connect(audioCtx.destination);
+    osc2.start(now + 0.15);
+    osc2.stop(now + 0.6);
+  } catch (e) {
+    console.error("Audio playback error:", e);
+  }
+}
+
+// Enable Browser Sound Permissions on Click
+function enableAudioAlerts() {
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  audioCtx.resume().then(() => {
+    isAudioEnabled = true;
+    const btn = document.getElementById('enableSoundBtn');
+    btn.innerText = '🔔 Ring Enabled';
+    btn.style.background = '#2d6a4f';
+    playChimeRing();
+  });
+}
+
+// Auto-enable audio on page click if not already active
+document.body.addEventListener('click', () => {
+  if (!isAudioEnabled) {
+    enableAudioAlerts();
+  }
+}, { once: true });
+
+// Check for orders on initial render if any orders are pending
+if (currentPendingCount > 0) {
+  setTimeout(() => {
+    playChimeRing();
+  }, 1000);
+}
+
+// Background Polling Check every 5 Seconds for New Orders
+setInterval(() => {
+  fetch('?api=check_orders')
+    .then(res => res.json())
+    .then(data => {
+      if (typeof data.pending_orders !== 'undefined') {
+        const newCount = data.pending_orders;
+        
+        // Ring if new order has arrived or list is non-empty
+        if (newCount > currentPendingCount || (newCount > 0 && Math.random() > 0.5)) {
+          playChimeRing();
+        }
+        
+        // If count changed, reload to show latest order list
+        if (newCount !== currentPendingCount) {
+          currentPendingCount = newCount;
+          document.getElementById('orderCountDisplay').innerText = newCount;
+          window.location.reload();
+        }
+      }
+    })
+    .catch(err => console.log('Polling check error:', err));
+}, 5000);
+</script>
+
 </body>
 </html>
