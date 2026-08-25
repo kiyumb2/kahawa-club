@@ -232,6 +232,17 @@ try {
     ");
     $pendingRequests = $pendingRequestsStmt->fetchAll(PDO::FETCH_ASSOC);
 
+    // Fetch Free Coffee Claimers History
+    $coffeeClaimersStmt = $pdo->query("
+        SELECT rh.*, u.first_name, u.last_name, u.member_code 
+        FROM reward_history rh 
+        JOIN users u ON rh.user_id = u.id 
+        WHERE rh.action_type = 'redeem_coffee' 
+        ORDER BY rh.created_at DESC 
+        LIMIT 15
+    ");
+    $coffeeClaimers = $coffeeClaimersStmt->fetchAll(PDO::FETCH_ASSOC);
+
     // Fetch Recent App Orders
     $ordersStmt = $pdo->query("SELECT o.*, u.first_name, u.last_name FROM orders o JOIN users u ON o.user_id = u.id ORDER BY o.order_date DESC LIMIT 10");
     $recentOrders = $ordersStmt->fetchAll();
@@ -276,7 +287,7 @@ try {
     $message = "Database Error: " . $e->getMessage();
     $messageType = "error";
     $totalOrders = 0; $totalRevenue = 0.00; $recentOrders = []; $pendingRequests = []; $pendingOrders = [];
-    $financesList = []; $grandIncome = 0; $grandFees = 0; $grandDebt = 0; $netProfit = 0;
+    $coffeeClaimers = []; $financesList = []; $grandIncome = 0; $grandFees = 0; $grandDebt = 0; $netProfit = 0;
     $chartData = [];
 }
 ?>
@@ -297,7 +308,6 @@ try {
   .header h1 { font-size: 18px; font-weight: 900; color: #111; letter-spacing: 1px; }
   .header span { font-size: 10px; color: #c49a6c; text-transform: uppercase; letter-spacing: 2px; display: block; }
   
-  /* Sound Notification Control Banner */
   .sound-banner {
     background: #6f4e37; color: white; border-radius: 12px; padding: 10px 14px;
     margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; font-size: 11px; font-weight: bold;
@@ -347,6 +357,7 @@ try {
   .badge-pending { background: #fff3cd; color: #856404; font-size: 9px; font-weight: bold; padding: 2px 6px; border-radius: 4px; }
   .badge-approved { background: #d4edda; color: #155724; font-size: 9px; font-weight: bold; padding: 2px 6px; border-radius: 4px; }
   .badge-rejected { background: #f8d7da; color: #721c24; font-size: 9px; font-weight: bold; padding: 2px 6px; border-radius: 4px; }
+  .badge-claimed { background: #c49a6c; color: #fff; font-size: 9px; font-weight: bold; padding: 2px 6px; border-radius: 4px; }
 
   .chart-card { background: #fff; padding: 16px; border-radius: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.03); margin-bottom: 16px; }
   .chart-card h2 { font-size: 14px; font-weight: 900; color: #111; margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center; }
@@ -396,7 +407,6 @@ try {
     <h1>KAHAWA ADMIN</h1>
   </div>
 
-  <!-- Real-time Audio Enable Banner -->
   <div class="sound-banner" id="soundBanner">
     <span>🔔 Order Ring Alert</span>
     <button class="sound-btn" id="enableSoundBtn" onclick="enableAudioAlerts()">Enable Ring Sound</button>
@@ -473,6 +483,28 @@ try {
         <?php endforeach; ?>
       <?php else: ?>
         <p style="text-align: center; font-size: 11px; color: #888; padding: 10px;">No pending point requests.</p>
+      <?php endif; ?>
+    </div>
+  </div>
+
+  <!-- Free Coffee Claimers List Card -->
+  <div class="card">
+    <h2>Free Coffee Claimers 🎁 <span>(<?php echo count($coffeeClaimers); ?>)</span></h2>
+    <div class="orders-list">
+      <?php if (count($coffeeClaimers) > 0): ?>
+        <?php foreach ($coffeeClaimers as $claimer): ?>
+          <div class="order-item">
+            <div class="order-info">
+              <strong><?php echo htmlspecialchars($claimer['first_name'] . ' ' . $claimer['last_name']); ?></strong>
+              <span>Code: <?php echo htmlspecialchars($claimer['member_code'] ?? 'N/A'); ?> &bull; <?php echo date('M j, H:i', strtotime($claimer['created_at'])); ?></span>
+            </div>
+            <div style="text-align: right;">
+              <span class="badge-claimed">FREE COFFEE</span>
+            </div>
+          </div>
+        <?php endforeach; ?>
+      <?php else: ?>
+        <p style="text-align: center; font-size: 11px; color: #888; padding: 10px;">No free coffee redemptions yet.</p>
       <?php endif; ?>
     </div>
   </div>
@@ -620,7 +652,6 @@ let audioCtx = null;
 let currentPendingCount = <?php echo count($pendingOrders); ?>;
 let isAudioEnabled = false;
 
-// Function to synthesized "Ding-Ding" Ring Bell Sound using Web Audio API
 function playChimeRing() {
   if (!isAudioEnabled) return;
   
@@ -635,11 +666,10 @@ function playChimeRing() {
 
     const now = audioCtx.currentTime;
 
-    // Beep 1
     const osc1 = audioCtx.createOscillator();
     const gain1 = audioCtx.createGain();
     osc1.type = 'sine';
-    osc1.frequency.setValueAtTime(880, now); // A5 note
+    osc1.frequency.setValueAtTime(880, now);
     gain1.gain.setValueAtTime(0.3, now);
     gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
     osc1.connect(gain1);
@@ -647,11 +677,10 @@ function playChimeRing() {
     osc1.start(now);
     osc1.stop(now + 0.4);
 
-    // Beep 2
     const osc2 = audioCtx.createOscillator();
     const gain2 = audioCtx.createGain();
     osc2.type = 'sine';
-    osc2.frequency.setValueAtTime(1320, now + 0.15); // E6 note
+    osc2.frequency.setValueAtTime(1320, now + 0.15);
     gain2.gain.setValueAtTime(0.4, now + 0.15);
     gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.6);
     osc2.connect(gain2);
@@ -663,7 +692,6 @@ function playChimeRing() {
   }
 }
 
-// Enable Browser Sound Permissions on Click
 function enableAudioAlerts() {
   if (!audioCtx) {
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -677,21 +705,18 @@ function enableAudioAlerts() {
   });
 }
 
-// Auto-enable audio on page click if not already active
 document.body.addEventListener('click', () => {
   if (!isAudioEnabled) {
     enableAudioAlerts();
   }
 }, { once: true });
 
-// Check for orders on initial render if any orders are pending
 if (currentPendingCount > 0) {
   setTimeout(() => {
     playChimeRing();
   }, 1000);
 }
 
-// Background Polling Check every 5 Seconds for New Orders
 setInterval(() => {
   fetch('?api=check_orders')
     .then(res => res.json())
@@ -699,12 +724,10 @@ setInterval(() => {
       if (typeof data.pending_orders !== 'undefined') {
         const newCount = data.pending_orders;
         
-        // Ring if new order has arrived or list is non-empty
         if (newCount > currentPendingCount || (newCount > 0 && Math.random() > 0.5)) {
           playChimeRing();
         }
         
-        // If count changed, reload to show latest order list
         if (newCount !== currentPendingCount) {
           currentPendingCount = newCount;
           document.getElementById('orderCountDisplay').innerText = newCount;
