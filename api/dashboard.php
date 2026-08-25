@@ -27,6 +27,27 @@ $user_id = $sessionData['user_id'];
 require_once __DIR__ . '/db.php';
 
 try {
+    // Handle Direct Reward Claim Request (Backend Processing)
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'claim_coffee') {
+        $stmt = $pdo->prepare("SELECT points FROM users WHERE id = ?");
+        $stmt->execute([$user_id]);
+        $user = $stmt->fetch();
+
+        if ($user && $user['points'] >= 100) {
+            // Deduct 100 points (or set to 0 if you prefer full reset: UPDATE users SET points = 0)
+            $update = $pdo->prepare("UPDATE users SET points = points - 100 WHERE id = ? AND points >= 100");
+            $update->execute([$user_id]);
+
+            // Insert into reward_history
+            $hist = $pdo->prepare("INSERT INTO reward_history (user_id, action_type, points_change, description) VALUES (?, 'redeem_coffee', -100, 'Claimed Free Coffee Reward')");
+            $hist->execute([$user_id]);
+
+            // Set session message and reload to display updated points
+            header("Location: " . $_SERVER['PHP_SELF'] . "?claimed=1");
+            exit;
+        }
+    }
+
     // Fetch live user data
     $stmt = $pdo->prepare("SELECT * FROM users WHERE id = ?");
     $stmt->execute([$user_id]);
@@ -463,7 +484,10 @@ try {
             <div style="font-size: 16px; font-weight: 900; margin-top: 2px;">You have a Free Coffee! ☕</div>
             <div style="font-size: 11px; color: #d8f3dc; margin-top: 2px;">You have <?php echo $points; ?> points available.</div>
         </div>
-        <button onclick="claimFreeCoffee()" style="background: #c49a6c; color: #111; border: none; padding: 10px 14px; border-radius: 12px; font-weight: bold; font-size: 12px; cursor: pointer;">Claim</button>
+        <form method="POST" style="margin: 0;">
+            <input type="hidden" name="action" value="claim_coffee">
+            <button type="submit" style="background: #c49a6c; color: #111; border: none; padding: 10px 14px; border-radius: 12px; font-weight: bold; font-size: 12px; cursor: pointer;">Claim</button>
+        </form>
     </div>
     <?php endif; ?>
     
@@ -491,7 +515,7 @@ try {
         </div>
       </div>
 
-      <!-- NEW: Customer Counter Request Button -->
+      <!-- Customer Counter Request Button -->
       <div class="request-btn-container">
         <button onclick="requestVisitPoints()" class="btn-request-points">
           📍 Claim Visit Points at Counter
@@ -641,6 +665,16 @@ try {
 </div>
 
 <script>
+    // Trigger popup on page redirect if user claimed coffee
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('claimed') === '1') {
+        window.addEventListener('DOMContentLoaded', () => {
+            showAppMessage("Reward Claimed!", "Success! Your free coffee has been claimed. Enjoy!", "🎉");
+            // Remove URL parameter without refreshing
+            window.history.replaceState({}, document.title, window.location.pathname);
+        });
+    }
+
     function requestVisitPoints() {
         fetch('/api/request_points', {
             method: 'POST',
@@ -744,26 +778,6 @@ try {
     }
     function closeMessageModal() {
         document.getElementById('appMessageModal').classList.remove('active');
-    }
-    function claimFreeCoffee() {
-        fetch('/api/claim_reward', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'same-origin'
-        })
-        .then(res => res.json())
-        .then(data => {
-            if(data.success) {
-                showAppMessage("Reward Claimed!", "Success! Your free coffee has been claimed. Enjoy!", "🎉");
-                setTimeout(() => { location.reload(); }, 2500);
-            } else {
-                showAppMessage("Notice", data.message, "⚠️");
-            }
-        })
-        .catch(error => {
-            console.error('Fetch Error:', error);
-            showAppMessage("Error", "An unexpected error occurred.", "❌");
-        });
     }
 </script>
 </body>
