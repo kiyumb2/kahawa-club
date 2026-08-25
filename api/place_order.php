@@ -42,11 +42,14 @@ if (empty($item_name) || $price <= 0) {
 require_once __DIR__ . '/db.php';
 
 try {
-    // Insert order into Supabase matching table structure
-    $stmt = $pdo->prepare("INSERT INTO orders (user_id, item_name, price, order_date) VALUES (?, ?, ?, NOW())");
+    // Insert order as 'pending' so it requires admin approval before revenue/points are applied
+    $stmt = $pdo->prepare("INSERT INTO orders (user_id, item_name, price, status, order_date) VALUES (?, ?, ?, 'pending', NOW())");
     $stmt->execute([$userId, $item_name, $price]);
 
-    echo json_encode(['success' => true, 'message' => 'Order placed successfully!']);
+    echo json_encode([
+        'success' => true, 
+        'message' => 'Order request submitted! Awaiting cashier/admin approval.'
+    ]);
 } catch (PDOException $e) {
     http_response_code(500);
     echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
