@@ -117,15 +117,17 @@ try {
                     $messageType = "success";
                 } elseif ($action === 'redeem_coffee') {
                     if ($customer['points'] >= 100) {
-                        $update = $pdo->prepare("UPDATE users SET points = points - 100 WHERE id = ?");
+                        // Reset points to 0 upon redemption
+                        $previousPoints = (int)$customer['points'];
+                        $update = $pdo->prepare("UPDATE users SET points = 0 WHERE id = ?");
                         $update->execute([$customer['id']]);
 
                         try {
-                            $hist = $pdo->prepare("INSERT INTO reward_history (user_id, action_type, points_change, description) VALUES (?, 'redeem_coffee', -100, ?)");
-                            $hist->execute([$customer['id'], 'Redeemed Free Coffee reward']);
+                            $hist = $pdo->prepare("INSERT INTO reward_history (user_id, action_type, points_change, description) VALUES (?, 'redeem_coffee', ?, ?)");
+                            $hist->execute([$customer['id'], -$previousPoints, 'Redeemed Free Coffee reward (Points reset to 0)']);
                         } catch (Exception $e) {}
 
-                        $message = "Successfully redeemed 100 points for a Free Coffee for " . $customer['first_name'] . "!";
+                        $message = "Successfully redeemed Free Coffee for " . htmlspecialchars($customer['first_name']) . "! Points reset to 0.";
                         $messageType = "success";
                     } else {
                         $message = "Error: Customer only has " . $customer['points'] . " points. Needs 100.";
@@ -364,7 +366,7 @@ try {
     </div>
   <?php endif; ?>
 
-  <!-- NEW: Pending Point Requests Card -->
+  <!-- Pending Point Requests Card -->
   <div class="card">
     <h2>Pending Counter Point Requests <span>📍</span></h2>
     <div class="requests-list">
