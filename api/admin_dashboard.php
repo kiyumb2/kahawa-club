@@ -45,7 +45,50 @@ $message = "";
 $messageType = "";
 
 try {
-    // Handle Member Code Actions (Points / Redemptions)
+    // Handle Direct Point Request Actions (Approve / Reject)
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['request_action'])) {
+        $requestId = intval($_POST['request_id'] ?? 0);
+        $action = $_POST['request_action'];
+
+        if ($requestId > 0) {
+            $reqStmt = $pdo->prepare("SELECT pr.*, u.first_name, u.last_name FROM point_requests pr JOIN users u ON pr.user_id = u.id WHERE pr.id = ? AND pr.status = 'pending'");
+            $reqStmt->execute([$requestId]);
+            $pointReq = $reqStmt->fetch(PDO::FETCH_ASSOC);
+
+            if ($pointReq) {
+                if ($action === 'approve') {
+                    $pdo->beginTransaction();
+
+                    // Update request status
+                    $upReq = $pdo->prepare("UPDATE point_requests SET status = 'approved' WHERE id = ?");
+                    $upReq->execute([$requestId]);
+
+                    // Add 10 points to user
+                    $upUser = $pdo->prepare("UPDATE users SET points = points + 10 WHERE id = ?");
+                    $upUser->execute([$pointReq['user_id']]);
+
+                    // Log in reward history
+                    $hist = $pdo->prepare("INSERT INTO reward_history (user_id, action_type, points_change, description) VALUES (?, 'visit_point', 10, ?)");
+                    $hist->execute([$pointReq['user_id'], 'Counter Visit Request Approved by Admin']);
+
+                    $pdo->commit();
+                    $message = "Approved +10 points request for " . htmlspecialchars($pointReq['first_name'] . ' ' . $pointReq['last_name']) . "!";
+                    $messageType = "success";
+                } elseif ($action === 'reject') {
+                    $upReq = $pdo->prepare("UPDATE point_requests SET status = 'rejected' WHERE id = ?");
+                    $upReq->execute([$requestId]);
+
+                    $message = "Request rejected successfully.";
+                    $messageType = "success";
+                }
+            } else {
+                $message = "Error: Pending request not found or already processed.";
+                $messageType = "error";
+            }
+        }
+    }
+
+    // Handle Member Code Actions (Manual Points / Redemptions)
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['member_code'])) {
         $member_code = strtoupper(trim($_POST['member_code']));
         $action = $_POST['action'] ?? '';
@@ -119,6 +162,16 @@ try {
     $totalOrders = $analytics['total_orders'] ?? 0;
     $totalRevenue = $analytics['total_revenue'] ?? 0.00;
 
+    // Fetch Pending Point Requests
+    $pendingRequestsStmt = $pdo->query("
+        SELECT pr.*, u.first_name, u.last_name, u.member_code 
+        FROM point_requests pr 
+        JOIN users u ON pr.user_id = u.id 
+        WHERE pr.status = 'pending' 
+        ORDER BY pr.created_at DESC
+    ");
+    $pendingRequests = $pendingRequestsStmt->fetchAll(PDO::FETCH_ASSOC);
+
     // Fetch Recent App Orders
     $ordersStmt = $pdo->query("SELECT o.*, u.first_name, u.last_name FROM orders o JOIN users u ON o.user_id = u.id ORDER BY o.order_date DESC LIMIT 10");
     $recentOrders = $ordersStmt->fetchAll();
@@ -161,7 +214,7 @@ try {
 } catch (PDOException $e) {
     $message = "Database Error: " . $e->getMessage();
     $messageType = "error";
-    $totalOrders = 0; $totalRevenue = 0.00; $recentOrders = [];
+    $totalOrders = 0; $totalRevenue = 0.00; $recentOrders = []; $pendingRequests = [];
     $financesList = []; $grandIncome = 0; $grandFees = 0; $grandDebt = 0; $netProfit = 0;
     $chartData = [];
 }
@@ -203,10 +256,18 @@ try {
   }
   .btn-add { background: #2d6a4f; }
   .btn-redeem { background: #6f4e37; }
+  .btn-danger { background: #b7094c; }
   .alert { padding: 10px; border-radius: 10px; font-size: 11px; font-weight: bold; text-align: center; margin-bottom: 14px; }
   .alert.success { background: #d8f3dc; color: #1b4332; border: 1px solid #95d5b2; }
   .alert.error { background: #f8d7da; color: #842029; border: 1px solid #f5c2c7; }
   
+  .requests-list { max-height: 200px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+  .request-item { display: flex; justify-content: space-between; align-items: center; padding: 10px; background: #fdfbf7; border: 1px solid #eee; border-radius: 12px; font-size: 12px; }
+  .request-info strong { display: block; color: #111; }
+  .request-info span { font-size: 10px; color: #777; }
+  .request-actions { display: flex; gap: 6px; }
+  .btn-sm { padding: 6px 10px; font-size: 10px; border-radius: 6px; border: none; font-weight: bold; cursor: pointer; color: white; }
+
   .orders-list { max-height: 160px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
   .order-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 10px; background: #f9f9f9; border-radius: 10px; font-size: 12px; }
   .order-info strong { display: block; color: #111; }
@@ -224,7 +285,7 @@ try {
   
   .finance-grid { display: flex; gap: 8px; margin-bottom: 12px; }
   .finance-badge { flex: 1; background: #f9f9f9; padding: 10px; border-radius: 12px; text-align: center; border: 1px solid #eee; }
-  .finance-badge h4 { font-size: 13px; font-weight: 900; }
+  .finance-badge h4 { font-size: 12px; font-weight: 900; }
   .finance-badge.income h4 { color: #2d6a4f; }
   .finance-badge.fee h4 { color: #b7094c; }
   .finance-badge.profit h4 { color: #111; }
@@ -292,7 +353,7 @@ try {
       <p>Orders Today</p>
     </div>
     <div class="analytic-card">
-      <h3>$<?php echo number_format($totalRevenue, 2); ?></h3>
+      <h3>ETB <?php echo number_format($totalRevenue, 2); ?></h3>
       <p>Revenue Today</p>
     </div>
   </div>
@@ -303,8 +364,37 @@ try {
     </div>
   <?php endif; ?>
 
+  <!-- NEW: Pending Point Requests Card -->
   <div class="card">
-    <h2>Customer Terminal</h2>
+    <h2>Pending Counter Point Requests <span>📍</span></h2>
+    <div class="requests-list">
+      <?php if (count($pendingRequests) > 0): ?>
+        <?php foreach ($pendingRequests as $req): ?>
+          <div class="request-item">
+            <div class="request-info">
+              <strong><?php echo htmlspecialchars($req['first_name'] . ' ' . $req['last_name']); ?></strong>
+              <span>Code: <?php echo htmlspecialchars($req['member_code'] ?? 'N/A'); ?> &bull; <?php echo date('H:i', strtotime($req['created_at'])); ?></span>
+            </div>
+            <div class="request-actions">
+              <form method="POST" style="display:inline;">
+                <input type="hidden" name="request_id" value="<?php echo $req['id']; ?>">
+                <button type="submit" name="request_action" value="approve" class="btn-sm btn-add">Approve</button>
+              </form>
+              <form method="POST" style="display:inline;">
+                <input type="hidden" name="request_id" value="<?php echo $req['id']; ?>">
+                <button type="submit" name="request_action" value="reject" class="btn-sm btn-danger">Reject</button>
+              </form>
+            </div>
+          </div>
+        <?php endforeach; ?>
+      <?php else: ?>
+        <p style="text-align: center; font-size: 11px; color: #888; padding: 10px;">No pending point requests.</p>
+      <?php endif; ?>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Manual Customer Terminal</h2>
     <form method="POST">
       <div class="form-group">
         <label>Member Code</label>
@@ -327,7 +417,7 @@ try {
               <strong><?php echo htmlspecialchars($order['first_name'] . ' ' . $order['last_name']); ?></strong>
               <span><?php echo htmlspecialchars($order['item_name']); ?> &bull; <?php echo date('H:i', strtotime($order['order_date'])); ?></span>
             </div>
-            <div class="order-price">$<?php echo number_format($order['price'], 2); ?></div>
+            <div class="order-price">ETB <?php echo number_format($order['price'], 2); ?></div>
           </div>
         <?php endforeach; ?>
       <?php else: ?>
@@ -348,7 +438,7 @@ try {
           ?>
           <div class="chart-bar-wrapper">
             <div class="chart-bar" style="height: <?php echo $heightPercent; ?>%;">
-              <span>$<?php echo number_format($data['daily_total'], 0); ?></span>
+              <span>ETB <?php echo number_format($data['daily_total'], 0); ?></span>
             </div>
             <div class="chart-label"><?php echo $formattedDate; ?></div>
           </div>
@@ -360,23 +450,23 @@ try {
   </div>
 
   <div class="card">
-    <h2>Financial Part <span>💰</span></h2>
+    <h2>Financial Overview <span>💰</span></h2>
     
     <div class="finance-grid">
       <div class="finance-badge income">
-        <h4>+$<?php echo number_format($grandIncome, 2); ?></h4>
+        <h4>+ETB <?php echo number_format($grandIncome, 2); ?></h4>
         <span>Income</span>
       </div>
       <div class="finance-badge fee">
-        <h4>-$<?php echo number_format($grandFees, 2); ?></h4>
+        <h4>-ETB <?php echo number_format($grandFees, 2); ?></h4>
         <span>Fees/Exp</span>
       </div>
       <div class="finance-badge profit">
-        <h4>$<?php echo number_format($netProfit, 2); ?></h4>
+        <h4>ETB <?php echo number_format($netProfit, 2); ?></h4>
         <span>Net Profit</span>
       </div>
       <div class="finance-badge debt">
-        <h4>$<?php echo number_format($grandDebt, 2); ?></h4>
+        <h4>ETB <?php echo number_format($grandDebt, 2); ?></h4>
         <span>Total Debt</span>
       </div>
     </div>
@@ -392,7 +482,7 @@ try {
         </select>
       </div>
       <div class="finance-row">
-        <input type="number" step="0.01" name="amount" placeholder="Amount ($)" required>
+        <input type="number" step="0.01" name="amount" placeholder="Amount (ETB)" required>
         <input type="date" name="record_date" value="<?php echo date('Y-m-d'); ?>" required>
       </div>
       <button type="submit" class="btn btn-add" style="width: 100%; padding: 8px; font-size: 11px;">Add Financial Record</button>
@@ -407,7 +497,7 @@ try {
               <span style="font-size: 9px; color: #777;"><?php echo $rec['record_date']; ?> &bull; <?php echo strtoupper($rec['type']); ?></span>
             </div>
             <div class="finance-amount">
-              <?php echo ($rec['type'] === 'fee') ? '-' : '+'; ?>$<?php echo number_format($rec['amount'], 2); ?>
+              <?php echo ($rec['type'] === 'fee') ? '-' : '+'; ?>ETB <?php echo number_format($rec['amount'], 2); ?>
             </div>
           </div>
         <?php endforeach; ?>
