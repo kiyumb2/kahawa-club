@@ -192,12 +192,26 @@ try {
     font-size: 11px;
     color: #888;
   }
-  .tap-qr {
-    font-size: 12px;
-    color: #c49a6c;
-    text-decoration: none;
-    font-weight: bold;
+  
+  .request-btn-container {
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(255,255,255,0.1);
   }
+  .btn-request-points {
+    width: 100%;
+    padding: 10px;
+    background: #c49a6c;
+    color: #111;
+    border: none;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 800;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+  .btn-request-points:hover { background: #b3895b; }
+
   /* Section Headings */
   .section-header {
     display: flex;
@@ -235,7 +249,7 @@ try {
   .offer-tag { font-size: 9px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; opacity: 0.8; margin-bottom: 6px; display: block; }
   .offer-heading { font-size: 15px; font-weight: 900; margin-bottom: 4px; }
   .offer-desc { font-size: 11px; opacity: 0.9; line-height: 1.4; }
-  /* Clickable Coffee Slide Panel */
+  
   .coffee-scroll {
     display: flex;
     gap: 12px;
@@ -286,7 +300,7 @@ try {
     border-radius: 10px;
     text-transform: uppercase;
   }
-  /* Modal Popup for Buying */
+  /* Modal Overlay Styles */
   .modal-overlay {
     position: absolute;
     top: 0; left: 0; right: 0; bottom: 0;
@@ -414,7 +428,7 @@ try {
 </style>
 </head>
 <body>
-<!-- Custom Popup Modal HTML -->
+
 <div id="custom-popup">
     <div class="popup-box">
         <div class="popup-icon" id="popup-icon-symbol">✓</div>
@@ -423,6 +437,7 @@ try {
         <button class="popup-btn" onclick="closeCustomPopup()">Continue</button>
     </div>
 </div>
+
 <div class="app-container">
   <!-- Top App Header -->
   <div class="app-header">
@@ -437,6 +452,7 @@ try {
       ⭐ <?php echo $points; ?>
     </div>
   </div>
+
   <!-- Main Scrollable Screen Content -->
   <div class="app-content">
     <!-- Automated Reward Banner -->
@@ -467,16 +483,22 @@ try {
           <div class="progress-bar-fill"></div>
         </div>
       </div>
+      
       <div class="card-footer-info">
         <div>
           <div class="user-fullname"><?php echo htmlspecialchars($full_name); ?></div>
           <div class="member-id"><?php echo htmlspecialchars($member_code); ?></div>
         </div>
-        <div>
-          <a href="#" class="tap-qr">Tap for QR &rarr;</a>
-        </div>
+      </div>
+
+      <!-- NEW: Customer Counter Request Button -->
+      <div class="request-btn-container">
+        <button onclick="requestVisitPoints()" class="btn-request-points">
+          📍 Claim Visit Points at Counter
+        </button>
       </div>
     </div>
+
     <!-- Offers for You Section -->
     <div class="section-header">
       <div class="section-title">Offers for You</div>
@@ -494,7 +516,8 @@ try {
         <div class="offer-desc">አንድ ሲኒ ቡና ሲጠጡ 10 ነፃ ኮይን ያገኛሉ</div>
       </div>
     </div>
-    <!-- Popular Today Slide Panel (Clickable to Buy) -->
+
+    <!-- Menu Section -->
     <div class="section-header">
       <div class="section-title">Our menu</div>
       <a href="#" class="section-action">See all &rarr;</a>
@@ -550,6 +573,7 @@ try {
       </div>
     </div>
   </div>
+
   <!-- Buy Confirmation Modal Popup -->
   <div class="modal-overlay" id="buyModal">
     <div class="modal-card">
@@ -560,6 +584,7 @@ try {
       <button class="modal-cancel" onclick="closeModal()">Cancel</button>
     </div>
   </div>
+
   <!-- Custom App Message Popup Modal -->
   <div class="modal-overlay" id="appMessageModal">
     <div class="modal-card">
@@ -569,6 +594,7 @@ try {
       <button class="modal-btn" onclick="closeMessageModal()">Got it!</button>
     </div>
   </div>
+
   <!-- Reward History Modal Overlay -->
   <div id="rewardsModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); z-index:1000; justify-content:center; align-items:center;">
     <div style="background:#F9F6F0; width:90%; max-width:400px; border-radius:20px; padding:20px; max-height:80vh; overflow-y:auto; box-shadow:0 10px 25px rgba(0,0,0,0.3);">
@@ -596,6 +622,7 @@ try {
         </div>
     </div>
   </div>
+
   <!-- Bottom App Navigation Bar -->
   <div class="bottom-nav">
     <a href="/api/dashboard" class="nav-item active">
@@ -612,7 +639,25 @@ try {
     </a>
   </div>
 </div>
+
 <script>
+    function requestVisitPoints() {
+        fetch('/api/request_points', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin'
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                showAppMessage("Request Sent!", data.message, "📍");
+            } else {
+                showAppMessage("Notice", data.message, "⚠️");
+            }
+        })
+        .catch(() => showAppMessage("Error", "Failed to send request to cashier.", "❌"));
+    }
+
     function openRewardsModal() {
         document.getElementById('rewardsModal').style.display = 'flex';
     }
@@ -657,18 +702,17 @@ try {
             return;
         }
 
-        // Close order modal before processing
         closeModal();
 
-fetch('/api/place_order', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'same-origin',
-    body: JSON.stringify({
-        item_name: itemName,
-        price: itemPrice
-    })
-})
+        fetch('/api/place_order', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({
+                item_name: itemName,
+                price: itemPrice
+            })
+        })
         .then(async response => {
             const isJson = response.headers.get('content-type')?.includes('application/json');
             const data = isJson ? await response.json() : null;
@@ -691,6 +735,7 @@ fetch('/api/place_order', {
             showPopup('Error', typeof error === 'string' ? error : 'An error occurred while processing your order.', false);
         });
     }
+
     function showAppMessage(title, text, icon = '☕') {
         document.getElementById('msgModalTitle').innerText = title;
         document.getElementById('msgModalText').innerText = text;
@@ -701,9 +746,10 @@ fetch('/api/place_order', {
         document.getElementById('appMessageModal').classList.remove('active');
     }
     function claimFreeCoffee() {
-        fetch('/api/claim_reward.php', {
+        fetch('/api/claim_reward', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin'
         })
         .then(res => res.json())
         .then(data => {
