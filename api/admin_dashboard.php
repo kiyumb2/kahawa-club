@@ -45,6 +45,50 @@ $message = "";
 $messageType = "";
 
 try {
+    // Handle Direct Order Request Actions (Approve / Reject)
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['order_action'])) {
+        $orderId = intval($_POST['order_id'] ?? 0);
+        $action = $_POST['order_action'];
+
+        if ($orderId > 0) {
+            $orderQuery = $pdo->prepare("SELECT o.*, u.first_name, u.last_name FROM orders o JOIN users u ON o.user_id = u.id WHERE o.id = ? AND o.status = 'pending'");
+            $orderQuery->execute([$orderId]);
+            $orderReq = $orderQuery->fetch(PDO::FETCH_ASSOC);
+
+            if ($orderReq) {
+                if ($action === 'approve') {
+                    $pdo->beginTransaction();
+
+                    // 1. Update order status to approved
+                    $upOrder = $pdo->prepare("UPDATE orders SET status = 'approved' WHERE id = ?");
+                    $upOrder->execute([$orderId]);
+
+                    // 2. Add points to user (e.g., +10 points per approved order)
+                    $earnedPoints = 10;
+                    $upUser = $pdo->prepare("UPDATE users SET points = points + ? WHERE id = ?");
+                    $upUser->execute([$earnedPoints, $orderReq['user_id']]);
+
+                    // 3. Log point gain in reward history
+                    $hist = $pdo->prepare("INSERT INTO reward_history (user_id, action_type, points_change, description, created_at) VALUES (?, 'order_approval', ?, ?, NOW())");
+                    $hist->execute([$orderReq['user_id'], $earnedPoints, 'Points earned for approved order: ' . $orderReq['item_name']]);
+
+                    $pdo->commit();
+                    $message = "Approved order for " . htmlspecialchars($orderReq['first_name'] . ' ' . $orderReq['last_name']) . "! Points added and revenue updated.";
+                    $messageType = "success";
+                } elseif ($action === 'reject') {
+                    $upOrder = $pdo->prepare("UPDATE orders SET status = 'rejected' WHERE id = ?");
+                    $upOrder->execute([$orderId]);
+
+                    $message = "Order request rejected successfully.";
+                    $messageType = "success";
+                }
+            } else {
+                $message = "Error: Pending order request not found or already processed.";
+                $messageType = "error";
+            }
+        }
+    }
+
     // Handle Direct Point Request Actions (Approve / Reject)
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['request_action'])) {
         $requestId = intval($_POST['request_id'] ?? 0);
@@ -68,7 +112,7 @@ try {
                     $upUser->execute([$pointReq['user_id']]);
 
                     // Log in reward history
-                    $hist = $pdo->prepare("INSERT INTO reward_history (user_id, action_type, points_change, description) VALUES (?, 'visit_point', 10, ?)");
+                    $hist = $pdo->prepare("INSERT INTO reward_history (user_id, action_type, points_change, description, created_at) VALUES (?, 'visit_point', 10, ?, NOW())");
                     $hist->execute([$pointReq['user_id'], 'Counter Visit Request Approved by Admin']);
 
                     $pdo->commit();
@@ -94,7 +138,6 @@ try {
         $action = $_POST['action'] ?? '';
 
         if (!empty($member_code)) {
-            // Flexible matching: check exact member_code column or dynamic fallback code
             $stmt = $pdo->prepare("
                 SELECT * FROM users 
                 WHERE UPPER(TRIM(member_code)) = ? 
@@ -109,21 +152,20 @@ try {
                     $update->execute([$customer['id']]);
 
                     try {
-                        $hist = $pdo->prepare("INSERT INTO reward_history (user_id, action_type, points_change, description) VALUES (?, 'visit_point', 10, ?)");
+                        $hist = $pdo->prepare("INSERT INTO reward_history (user_id, action_type, points_change, description, created_at) VALUES (?, 'visit_point', 10, ?, NOW())");
                         $hist->execute([$customer['id'], 'Visit reward added by cashier']);
                     } catch (Exception $e) {}
 
-                    $message = "Successfully added +10 points to " . $customer['first_name'] . " " . $customer['last_name'] . "!";
+                    $message = "Successfully added +10 points to " . htmlspecialchars($customer['first_name'] . " " . $customer['last_name']) . "!";
                     $messageType = "success";
                 } elseif ($action === 'redeem_coffee') {
                     if ($customer['points'] >= 100) {
-                        // Reset points to 0 upon redemption
                         $previousPoints = (int)$customer['points'];
                         $update = $pdo->prepare("UPDATE users SET points = 0 WHERE id = ?");
                         $update->execute([$customer['id']]);
 
                         try {
-                            $hist = $pdo->prepare("INSERT INTO reward_history (user_id, action_type, points_change, description) VALUES (?, 'redeem_coffee', ?, ?)");
+                            $hist = $pdo->prepare("INSERT INTO reward_history (user_id, action_type, points_change, description, created_at) VALUES (?, 'redeem_coffee', ?, ?, NOW())");
                             $hist->execute([$customer['id'], -$previousPoints, 'Redeemed Free Coffee reward (Points reset to 0)']);
                         } catch (Exception $e) {}
 
@@ -155,14 +197,24 @@ try {
         }
     }
 
-    // Fetch Daily Analytics (Today's metrics)
+    // Fetch Daily Analytics (Approved Orders Only for Today's Revenue)
     $today = date('Y-m-d');
-    $ordersTodayStmt = $pdo->prepare("SELECT COUNT(*) as total_orders, SUM(price) as total_revenue FROM orders WHERE DATE(order_date) = ?");
+    $ordersTodayStmt = $pdo->prepare("SELECT COUNT(*) as total_orders, COALESCE(SUM(price), 0) as total_revenue FROM orders WHERE status = 'approved' AND DATE(order_date) = ?");
     $ordersTodayStmt->execute([$today]);
     $analytics = $ordersTodayStmt->fetch();
     
     $totalOrders = $analytics['total_orders'] ?? 0;
     $totalRevenue = $analytics['total_revenue'] ?? 0.00;
+
+    // Fetch Pending Item Order Requests
+    $pendingOrdersStmt = $pdo->query("
+        SELECT o.*, u.first_name, u.last_name, u.member_code 
+        FROM orders o 
+        JOIN users u ON o.user_id = u.id 
+        WHERE o.status = 'pending' 
+        ORDER BY o.order_date DESC
+    ");
+    $pendingOrders = $pendingOrdersStmt->fetchAll(PDO::FETCH_ASSOC);
 
     // Fetch Pending Point Requests
     $pendingRequestsStmt = $pdo->query("
@@ -197,10 +249,11 @@ try {
     $grandIncome = $totalRevenue + $manualIncome;
     $netProfit = $grandIncome - $grandFees;
 
-    // Fetch last 5 days sales for chart
+    // Fetch last 5 days sales for chart (Approved Orders Only)
     $chartStmt = $pdo->query("
         SELECT DATE(order_date) as sale_date, SUM(price) as daily_total 
         FROM orders 
+        WHERE status = 'approved'
         GROUP BY DATE(order_date) 
         ORDER BY sale_date DESC 
         LIMIT 5
@@ -216,7 +269,7 @@ try {
 } catch (PDOException $e) {
     $message = "Database Error: " . $e->getMessage();
     $messageType = "error";
-    $totalOrders = 0; $totalRevenue = 0.00; $recentOrders = []; $pendingRequests = [];
+    $totalOrders = 0; $totalRevenue = 0.00; $recentOrders = []; $pendingRequests = []; $pendingOrders = [];
     $financesList = []; $grandIncome = 0; $grandFees = 0; $grandDebt = 0; $netProfit = 0;
     $chartData = [];
 }
@@ -270,12 +323,15 @@ try {
   .request-actions { display: flex; gap: 6px; }
   .btn-sm { padding: 6px 10px; font-size: 10px; border-radius: 6px; border: none; font-weight: bold; cursor: pointer; color: white; }
 
-  .orders-list { max-height: 160px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+  .orders-list { max-height: 180px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
   .order-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 10px; background: #f9f9f9; border-radius: 10px; font-size: 12px; }
   .order-info strong { display: block; color: #111; }
   .order-info span { font-size: 10px; color: #777; }
   .order-price { font-weight: 900; color: #6f4e37; }
-  
+  .badge-pending { background: #fff3cd; color: #856404; font-size: 9px; font-weight: bold; padding: 2px 6px; border-radius: 4px; }
+  .badge-approved { background: #d4edda; color: #155724; font-size: 9px; font-weight: bold; padding: 2px 6px; border-radius: 4px; }
+  .badge-rejected { background: #f8d7da; color: #721c24; font-size: 9px; font-weight: bold; padding: 2px 6px; border-radius: 4px; }
+
   .chart-card { background: #fff; padding: 16px; border-radius: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.03); margin-bottom: 16px; }
   .chart-card h2 { font-size: 14px; font-weight: 900; color: #111; margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center; }
   .chart-container { display: flex; align-items: flex-end; justify-content: space-between; height: 120px; padding-top: 20px; border-bottom: 2px solid #eee; gap: 8px; }
@@ -352,7 +408,7 @@ try {
   <div class="analytics-grid">
     <div class="analytic-card">
       <h3><?php echo $totalOrders; ?></h3>
-      <p>Orders Today</p>
+      <p>Approved Orders Today</p>
     </div>
     <div class="analytic-card">
       <h3>ETB <?php echo number_format($totalRevenue, 2); ?></h3>
@@ -366,9 +422,38 @@ try {
     </div>
   <?php endif; ?>
 
+  <!-- Pending Order Requests Card -->
+  <div class="card">
+    <h2>Pending Order Requests ☕ <span>(<?php echo count($pendingOrders); ?>)</span></h2>
+    <div class="requests-list">
+      <?php if (count($pendingOrders) > 0): ?>
+        <?php foreach ($pendingOrders as $pOrder): ?>
+          <div class="request-item">
+            <div class="request-info">
+              <strong><?php echo htmlspecialchars($pOrder['first_name'] . ' ' . $pOrder['last_name']); ?></strong>
+              <span><?php echo htmlspecialchars($pOrder['item_name']); ?> &bull; ETB <?php echo number_format($pOrder['price'], 2); ?> &bull; <?php echo date('H:i', strtotime($pOrder['order_date'])); ?></span>
+            </div>
+            <div class="request-actions">
+              <form method="POST" style="display:inline;">
+                <input type="hidden" name="order_id" value="<?php echo $pOrder['id']; ?>">
+                <button type="submit" name="order_action" value="approve" class="btn-sm btn-add">Approve</button>
+              </form>
+              <form method="POST" style="display:inline;">
+                <input type="hidden" name="order_id" value="<?php echo $pOrder['id']; ?>">
+                <button type="submit" name="order_action" value="reject" class="btn-sm btn-danger">Reject</button>
+              </form>
+            </div>
+          </div>
+        <?php endforeach; ?>
+      <?php else: ?>
+        <p style="text-align: center; font-size: 11px; color: #888; padding: 10px;">No pending order requests.</p>
+      <?php endif; ?>
+    </div>
+  </div>
+
   <!-- Pending Point Requests Card -->
   <div class="card">
-    <h2>Pending Counter Point Requests <span>📍</span></h2>
+    <h2>Pending Counter Point Requests 📍 <span>(<?php echo count($pendingRequests); ?>)</span></h2>
     <div class="requests-list">
       <?php if (count($pendingRequests) > 0): ?>
         <?php foreach ($pendingRequests as $req): ?>
@@ -419,7 +504,15 @@ try {
               <strong><?php echo htmlspecialchars($order['first_name'] . ' ' . $order['last_name']); ?></strong>
               <span><?php echo htmlspecialchars($order['item_name']); ?> &bull; <?php echo date('H:i', strtotime($order['order_date'])); ?></span>
             </div>
-            <div class="order-price">ETB <?php echo number_format($order['price'], 2); ?></div>
+            <div style="text-align: right;">
+              <div class="order-price">ETB <?php echo number_format($order['price'], 2); ?></div>
+              <span class="<?php 
+                $st = strtolower($order['status'] ?? 'pending');
+                echo ($st === 'approved') ? 'badge-approved' : (($st === 'rejected') ? 'badge-rejected' : 'badge-pending'); 
+              ?>">
+                <?php echo strtoupper($order['status'] ?? 'PENDING'); ?>
+              </span>
+            </div>
           </div>
         <?php endforeach; ?>
       <?php else: ?>
