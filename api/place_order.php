@@ -1,7 +1,11 @@
 <?php
+// Clear buffer to guarantee clean JSON output
+if (ob_get_length()) ob_clean();
+
 header('Content-Type: application/json');
 
-define('ENCRYPTION_KEY', 'kahawa_secret_key_change_this_123456!');
+// Retrieve secret key securely from server environment or fallback for development
+define('ENCRYPTION_KEY', getenv('ENCRYPTION_KEY') ?: 'kahawa_secret_key_change_this_123456!');
 
 /**
  * Decrypt cookie data to restore stateless sessions on Vercel
@@ -34,6 +38,7 @@ $item_name = trim($data['item_name'] ?? '');
 $price     = floatval($data['price'] ?? 0);
 
 if (empty($item_name) || $price <= 0) {
+    http_response_code(400);
     echo json_encode(['success' => false, 'message' => 'Invalid order item details.']);
     exit;
 }
@@ -52,6 +57,9 @@ try {
     ]);
 } catch (PDOException $e) {
     http_response_code(500);
-    echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
+    echo json_encode([
+        'success' => false, 
+        'message' => 'Failed to process order. Please try again later.'
+    ]);
 }
 ?>
