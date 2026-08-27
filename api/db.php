@@ -10,8 +10,10 @@ try {
     $dsn = "pgsql:host=$host;port=$port;dbname=$db;sslmode=require";
     
     $pdo = new PDO($dsn, $user, $pass, [
-        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+        PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
         PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+        // Required for Supabase PgBouncer Transaction Pooling
+        PDO::ATTR_EMULATE_PREPARES   => true,
     ]);
 } catch (PDOException $e) {
     if (!headers_sent()) {
