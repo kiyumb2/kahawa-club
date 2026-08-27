@@ -76,13 +76,14 @@ try {
                     // 1. Update order status to approved[cite: 1]
                     $upOrder = $pdo->prepare("UPDATE orders SET status = 'approved' WHERE id = ?");
                     $upOrder->execute([$orderId]);
-                    // 2. Add points to user[cite: 1]
-                    $earnedPoints = 10;
+                    // 2. Add 10 points per item ordered[cite: 1]
+                    $qty = isset($orderReq['quantity']) ? (int)$orderReq['quantity'] : 1;
+                    $earnedPoints = 10 * $qty;
                     $upUser = $pdo->prepare("UPDATE users SET points = points + ? WHERE id = ?");
                     $upUser->execute([$earnedPoints, $orderReq['user_id']]);
                     // 3. Log point gain in reward history[cite: 1]
                     $hist = $pdo->prepare("INSERT INTO reward_history (user_id, action_type, points_change, description, created_at) VALUES (?, 'order_approval', ?, ?, NOW())");
-                    $hist->execute([$orderReq['user_id'], $earnedPoints, 'Points earned for approved order: ' . $orderReq['item_name']]);
+                    $hist->execute([$orderReq['user_id'], $earnedPoints, 'Points earned for approved order: ' . $qty . 'x ' . $orderReq['item_name']]);
                     $pdo->commit();
                     $message = "Approved order for " . htmlspecialchars($orderReq['first_name'] . ' ' . $orderReq['last_name']) . "! Points added and revenue updated.";
                     $messageType = "success";
@@ -193,7 +194,7 @@ try {
 
     // Fetch Daily Analytics[cite: 1]
     $today = date('Y-m-d');
-    $ordersTodayStmt = $pdo->prepare("SELECT COUNT(*) as total_orders, COALESCE(SUM(price), 0) as total_revenue FROM orders WHERE status = 'approved' AND DATE(order_date) = ?");
+    $ordersTodayStmt = $pdo->prepare("SELECT COUNT(*) as total_orders, COALESCE(SUM(price * COALESCE(quantity, 1)), 0) as total_revenue FROM orders WHERE status = 'approved' AND DATE(order_date) = ?");
     $ordersTodayStmt->execute([$today]);
     $analytics = $ordersTodayStmt->fetch();
     
@@ -256,7 +257,7 @@ try {
 
     // Sales Chart Data[cite: 1]
     $chartStmt = $pdo->query("
-        SELECT DATE(order_date) as sale_date, SUM(price) as daily_total 
+        SELECT DATE(order_date) as sale_date, SUM(price * COALESCE(quantity, 1)) as daily_total 
         FROM orders 
         WHERE status = 'approved'
         GROUP BY DATE(order_date) 
@@ -340,6 +341,7 @@ try {
   .order-info strong { display: block; color: #111; }
   .order-info span { font-size: 10px; color: #777; }
   .order-price { font-weight: 900; color: #6f4e37; }
+  .qty-tag { background: #6f4e37; color: #fff; font-size: 10px; font-weight: bold; padding: 1px 5px; border-radius: 4px; margin-right: 4px; }
   .badge-pending { background: #fff3cd; color: #856404; font-size: 9px; font-weight: bold; padding: 2px 6px; border-radius: 4px; }
   .badge-approved { background: #d4edda; color: #155724; font-size: 9px; font-weight: bold; padding: 2px 6px; border-radius: 4px; }
   .badge-rejected { background: #f8d7da; color: #721c24; font-size: 9px; font-weight: bold; padding: 2px 6px; border-radius: 4px; }
@@ -413,10 +415,11 @@ try {
     <div class="requests-list">
       <?php if (count($pendingOrders) > 0): ?>
         <?php foreach ($pendingOrders as $pOrder): ?>
+          <?php $pQty = isset($pOrder['quantity']) ? (int)$pOrder['quantity'] : 1; ?>
           <div class="request-item">
             <div class="request-info">
               <strong><?php echo htmlspecialchars($pOrder['first_name'] . ' ' . $pOrder['last_name']); ?></strong>
-              <span><?php echo htmlspecialchars($pOrder['item_name']); ?> &bull; ETB <?php echo number_format($pOrder['price'], 2); ?> &bull; <?php echo date('H:i', strtotime($pOrder['order_date'])); ?></span>
+              <span><span class="qty-tag"><?php echo $pQty; ?>x</span> <?php echo htmlspecialchars($pOrder['item_name']); ?> &bull; ETB <?php echo number_format($pOrder['price'] * $pQty, 2); ?> &bull; <?php echo date('H:i', strtotime($pOrder['order_date'])); ?></span>
             </div>
             <div class="request-actions">
               <form method="POST" style="display:inline;">
@@ -502,13 +505,14 @@ try {
     <div class="orders-list">
       <?php if (count($recentOrders) > 0): ?>
         <?php foreach ($recentOrders as $order): ?>
+          <?php $oQty = isset($order['quantity']) ? (int)$order['quantity'] : 1; ?>
           <div class="order-item">
             <div class="order-info">
               <strong><?php echo htmlspecialchars($order['first_name'] . ' ' . $order['last_name']); ?></strong>
-              <span><?php echo htmlspecialchars($order['item_name']); ?> &bull; <?php echo date('H:i', strtotime($order['order_date'])); ?></span>
+              <span><span class="qty-tag"><?php echo $oQty; ?>x</span> <?php echo htmlspecialchars($order['item_name']); ?> &bull; <?php echo date('H:i', strtotime($order['order_date'])); ?></span>
             </div>
             <div style="text-align: right;">
-              <div class="order-price">ETB <?php echo number_format($order['price'], 2); ?></div>
+              <div class="order-price">ETB <?php echo number_format($order['price'] * $oQty, 2); ?></div>
               <span class="<?php 
                 $st = strtolower($order['status'] ?? 'pending');
                 echo ($st === 'approved') ? 'badge-approved' : (($st === 'rejected') ? 'badge-rejected' : 'badge-pending'); 
