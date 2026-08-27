@@ -35,11 +35,12 @@ $rawInput = file_get_contents('php://input');
 $data = json_decode($rawInput, true) ?? $_POST;
 
 $item_name = trim($data['item_name'] ?? '');
+$quantity  = intval($data['quantity'] ?? 1);
 $price     = floatval($data['price'] ?? 0);
 
-if (empty($item_name) || $price <= 0) {
+if (empty($item_name) || $quantity < 1 || $price <= 0) {
     http_response_code(400);
-    echo json_encode(['success' => false, 'message' => 'Invalid order item details.']);
+    echo json_encode(['success' => false, 'message' => 'Invalid order item details or quantity.']);
     exit;
 }
 
@@ -47,9 +48,12 @@ if (empty($item_name) || $price <= 0) {
 require_once __DIR__ . '/db.php';
 
 try {
+    // Append quantity identifier to item name if quantity > 1
+    $formatted_item = $quantity > 1 ? "{$item_name} (x{$quantity})" : $item_name;
+
     // Insert order as 'pending' so it requires admin approval before revenue/points are applied
     $stmt = $pdo->prepare("INSERT INTO orders (user_id, item_name, price, status, order_date) VALUES (?, ?, ?, 'pending', NOW())");
-    $stmt->execute([$userId, $item_name, $price]);
+    $stmt->execute([$userId, $formatted_item, $price]);
 
     echo json_encode([
         'success' => true, 
