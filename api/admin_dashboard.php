@@ -93,20 +93,32 @@ try {
                     $upOrder = $pdo->prepare("UPDATE orders SET status = 'approved' WHERE id = ?");
                     $upOrder->execute([$orderId]);
 
-                    // 2. Add 10 points per item ordered
-                    $qty = extractQuantity($orderReq);
-                    $earnedPoints = 10 * $qty;
+                    // Check if this was a Free Coffee order redemption
+                    $isFreeCoffee = (strpos(strtolower($orderReq['item_name']), 'free coffee') !== false || floatval($orderReq['price']) == 0);
 
-                    $upUser = $pdo->prepare("UPDATE users SET points = points + ? WHERE id = ?");
-                    $upUser->execute([$earnedPoints, $orderReq['user_id']]);
+                    if ($isFreeCoffee) {
+                        // Reset points to 0 for Free Coffee redemption
+                        $upUser = $pdo->prepare("UPDATE users SET points = 0 WHERE id = ?");
+                        $upUser->execute([$orderReq['user_id']]);
 
-                    // 3. Log point gain in reward history
-                    $hist = $pdo->prepare("INSERT INTO reward_history (user_id, action_type, points_change, description, created_at) VALUES (?, 'order_approval', ?, ?, NOW())");
-                    $hist->execute([$orderReq['user_id'], $earnedPoints, 'Points earned for approved order: ' . $qty . 'x ' . $orderReq['item_name']]);
+                        $hist = $pdo->prepare("INSERT INTO reward_history (user_id, action_type, points_change, description, created_at) VALUES (?, 'redeem_coffee', 0, ?, NOW())");
+                        $hist->execute([$orderReq['user_id'], 'Approved Free Coffee Order']);
+                    } else {
+                        // 2. Add 10 points per item ordered for standard paid orders
+                        $qty = extractQuantity($orderReq);
+                        $earnedPoints = 10 * $qty;
+
+                        $upUser = $pdo->prepare("UPDATE users SET points = points + ? WHERE id = ?");
+                        $upUser->execute([$earnedPoints, $orderReq['user_id']]);
+
+                        // 3. Log point gain in reward history
+                        $hist = $pdo->prepare("INSERT INTO reward_history (user_id, action_type, points_change, description, created_at) VALUES (?, 'order_approval', ?, ?, NOW())");
+                        $hist->execute([$orderReq['user_id'], $earnedPoints, 'Points earned for approved order: ' . $qty . 'x ' . $orderReq['item_name']]);
+                    }
 
                     $pdo->commit();
 
-                    $message = "Approved order for " . htmlspecialchars($orderReq['first_name'] . ' ' . $orderReq['last_name']) . "! Points added and revenue updated.";
+                    $message = "Approved order for " . htmlspecialchars($orderReq['first_name'] . ' ' . $orderReq['last_name']) . "!";
                     $messageType = "success";
                 } elseif ($action === 'reject') {
                     $upOrder = $pdo->prepare("UPDATE orders SET status = 'rejected' WHERE id = ?");
@@ -660,7 +672,6 @@ try {
 if (window.location.search.length > 0) {
     window.history.replaceState({}, document.title, window.location.pathname);
 }
-
 let audioCtx = null;
 let currentPendingCount = <?php echo count($pendingOrders); ?>;
 let isAudioEnabled = false;
