@@ -241,6 +241,62 @@ try {
     $totalOrders = $analytics['total_orders'] ?? 0;
     $totalRevenue = $analytics['total_revenue'] ?? 0.00;
 
+    // --- CALCULATE DAILY, WEEKLY, & MONTHLY FINANCIAL REPORTS ---
+    
+    // 1. Daily Financial Breakdown (Today)
+    $dailyAppRevenueStmt = $pdo->prepare("SELECT COALESCE(SUM(price), 0) FROM orders WHERE status = 'approved' AND DATE(order_date) = CURRENT_DATE");
+    $dailyAppRevenueStmt->execute();
+    $dailyAppRevenue = (float)$dailyAppRevenueStmt->fetchColumn();
+
+    $dailyFinanceStmt = $pdo->prepare("
+        SELECT 
+            COALESCE(SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END), 0) as manual_income,
+            COALESCE(SUM(CASE WHEN type = 'fee' THEN amount ELSE 0 END), 0) as fees,
+            COALESCE(SUM(CASE WHEN type = 'debt' THEN amount ELSE 0 END), 0) as debt
+        FROM finances WHERE record_date = CURRENT_DATE
+    ");
+    $dailyFinanceStmt->execute();
+    $dFin = $dailyFinanceStmt->fetch(PDO::FETCH_ASSOC);
+    $dailyIncome = $dailyAppRevenue + (float)$dFin['manual_income'];
+    $dailyFees = (float)$dFin['fees'];
+    $dailyNetProfit = $dailyIncome - $dailyFees;
+
+    // 2. Weekly Financial Breakdown (Current Week: Monday to Sunday)
+    $weeklyAppRevenueStmt = $pdo->prepare("SELECT COALESCE(SUM(price), 0) FROM orders WHERE status = 'approved' AND DATE_TRUNC('week', order_date) = DATE_TRUNC('week', CURRENT_DATE)");
+    $weeklyAppRevenueStmt->execute();
+    $weeklyAppRevenue = (float)$weeklyAppRevenueStmt->fetchColumn();
+
+    $weeklyFinanceStmt = $pdo->prepare("
+        SELECT 
+            COALESCE(SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END), 0) as manual_income,
+            COALESCE(SUM(CASE WHEN type = 'fee' THEN amount ELSE 0 END), 0) as fees,
+            COALESCE(SUM(CASE WHEN type = 'debt' THEN amount ELSE 0 END), 0) as debt
+        FROM finances WHERE DATE_TRUNC('week', record_date) = DATE_TRUNC('week', CURRENT_DATE)
+    ");
+    $weeklyFinanceStmt->execute();
+    $wFin = $weeklyFinanceStmt->fetch(PDO::FETCH_ASSOC);
+    $weeklyIncome = $weeklyAppRevenue + (float)$wFin['manual_income'];
+    $weeklyFees = (float)$wFin['fees'];
+    $weeklyNetProfit = $weeklyIncome - $weeklyFees;
+
+    // 3. Monthly Financial Breakdown (Current Month)
+    $monthlyAppRevenueStmt = $pdo->prepare("SELECT COALESCE(SUM(price), 0) FROM orders WHERE status = 'approved' AND DATE_TRUNC('month', order_date) = DATE_TRUNC('month', CURRENT_DATE)");
+    $monthlyAppRevenueStmt->execute();
+    $monthlyAppRevenue = (float)$monthlyAppRevenueStmt->fetchColumn();
+
+    $monthlyFinanceStmt = $pdo->prepare("
+        SELECT 
+            COALESCE(SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END), 0) as manual_income,
+            COALESCE(SUM(CASE WHEN type = 'fee' THEN amount ELSE 0 END), 0) as fees,
+            COALESCE(SUM(CASE WHEN type = 'debt' THEN amount ELSE 0 END), 0) as debt
+        FROM finances WHERE DATE_TRUNC('month', record_date) = DATE_TRUNC('month', CURRENT_DATE)
+    ");
+    $monthlyFinanceStmt->execute();
+    $mFin = $monthlyFinanceStmt->fetch(PDO::FETCH_ASSOC);
+    $monthlyIncome = $monthlyAppRevenue + (float)$mFin['manual_income'];
+    $monthlyFees = (float)$mFin['fees'];
+    $monthlyNetProfit = $monthlyIncome - $monthlyFees;
+
     // Fetch Pending Item Order Requests
     $pendingOrdersStmt = $pdo->query("
         SELECT o.*, u.first_name, u.last_name, u.member_code 
@@ -276,9 +332,10 @@ try {
     $ordersStmt = $pdo->query("SELECT o.*, u.first_name, u.last_name FROM orders o JOIN users u ON o.user_id = u.id ORDER BY o.order_date DESC LIMIT 10");
     $recentOrders = $ordersStmt->fetchAll();
 
-    // Fetch Financial Summary
+    // Fetch Financial Summary List
     $financesStmt = $pdo->query("SELECT * FROM finances ORDER BY record_date DESC, id DESC LIMIT 15");
     $financesList = $financesStmt->fetchAll(PDO::FETCH_ASSOC);
+
     $totalsStmt = $pdo->query("
         SELECT 
             SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END) as total_income,
@@ -316,6 +373,9 @@ try {
     $messageType = "error";
     $totalOrders = 0; $totalRevenue = 0.00; $recentOrders = []; $pendingRequests = []; $pendingOrders = [];
     $coffeeClaimers = []; $financesList = []; $grandIncome = 0; $grandFees = 0; $grandDebt = 0; $netProfit = 0;
+    $dailyIncome = 0; $dailyFees = 0; $dailyNetProfit = 0;
+    $weeklyIncome = 0; $weeklyFees = 0; $weeklyNetProfit = 0;
+    $monthlyIncome = 0; $monthlyFees = 0; $monthlyNetProfit = 0;
     $chartData = [];
 }
 ?>
@@ -330,7 +390,7 @@ try {
   body { background: #1e1e1e; display: flex; justify-content: center; align-items: center; min-height: 100vh; color: #333; padding: 20px 0; }
   .app-container { 
     width: 100%; max-width: 480px; background: #F9F6F0; border-radius: 30px; 
-    padding: 24px 24px 80px 24px; box-shadow: 0 20px 40px rgba(0,0,0,0.5); border: 8px solid #2c2c2c; position: relative;
+    padding: 24px 24px 85px 24px; box-shadow: 0 20px 40px rgba(0,0,0,0.5); border: 8px solid #2c2c2c; position: relative;
   }
   .header { text-align: center; margin-bottom: 20px; }
   .header h1 { font-size: 18px; font-weight: 900; color: #111; letter-spacing: 1px; }
@@ -385,6 +445,7 @@ try {
   .badge-approved { background: #d4edda; color: #155724; font-size: 9px; font-weight: bold; padding: 2px 6px; border-radius: 4px; }
   .badge-rejected { background: #f8d7da; color: #721c24; font-size: 9px; font-weight: bold; padding: 2px 6px; border-radius: 4px; }
   .badge-claimed { background: #c49a6c; color: #fff; font-size: 9px; font-weight: bold; padding: 2px 6px; border-radius: 4px; }
+  
   .chart-card { background: #fff; padding: 16px; border-radius: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.03); margin-bottom: 16px; }
   .chart-card h2 { font-size: 14px; font-weight: 900; color: #111; margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center; }
   .chart-container { display: flex; align-items: flex-end; justify-content: space-between; height: 120px; padding-top: 20px; border-bottom: 2px solid #eee; gap: 8px; }
@@ -394,6 +455,15 @@ try {
   .chart-bar span { position: absolute; top: -18px; left: 50%; transform: translateX(-50%); font-size: 9px; font-weight: bold; color: #555; white-space: nowrap; }
   .chart-label { font-size: 9px; color: #777; margin-top: 6px; font-weight: bold; text-align: center; }
   
+  /* Financial Periodic Table Styling */
+  .report-table { width: 100%; border-collapse: collapse; margin-bottom: 10px; font-size: 11px; }
+  .report-table th, .report-table td { padding: 8px 6px; text-align: right; border-bottom: 1px solid #eee; }
+  .report-table th:first-child, .report-table td:first-child { text-align: left; }
+  .report-table th { font-weight: 900; color: #555; background: #fdfbf7; }
+  .report-table tr.profit-row td { font-weight: 900; background: #f4f9f4; }
+  .profit-positive { color: #2d6a4f; font-weight: 900; }
+  .profit-negative { color: #b7094c; font-weight: 900; }
+
   .finance-grid { display: flex; gap: 8px; margin-bottom: 12px; }
   .finance-badge { flex: 1; background: #f9f9f9; padding: 10px; border-radius: 12px; text-align: center; border: 1px solid #eee; }
   .finance-badge h4 { font-size: 12px; font-weight: 900; }
@@ -412,14 +482,16 @@ try {
   .finance-item.fee { border-left: 4px solid #b7094c; }
   .finance-item.debt { border-left: 4px solid #e85d04; }
   .finance-amount { font-weight: 900; }
+  
+  /* Bottom Navigation Styling */
   .bottom-nav {
     position: absolute; bottom: 0; left: 0; right: 0; height: 65px; background: #ffffff;
     border-bottom-left-radius: 22px; border-bottom-right-radius: 22px; display: flex;
     justify-space: space-around; align-items: center; border-top: 1px solid #eee; box-shadow: 0 -4px 15px rgba(0,0,0,0.03);
   }
-  .nav-item { display: flex; flex-direction: column; align-items: center; text-decoration: none; color: #888; font-size: 10px; font-weight: bold; gap: 4px; }
+  .nav-item { display: flex; flex-direction: column; align-items: center; text-decoration: none; color: #888; font-size: 10px; font-weight: bold; gap: 3px; cursor: pointer; }
   .nav-item.active { color: #6f4e37; }
-  .nav-item .icon { font-size: 18px; }
+  .nav-item .icon { font-size: 16px; }
   .nav-item.logout { color: #d9534f; }
 </style>
 </head>
@@ -596,12 +668,53 @@ try {
     </div>
   </div>
 
+  <!-- Financial Reports Section (Daily, Weekly, Monthly Breakdown) -->
+  <div class="card" id="financialsSection">
+    <h2>Periodic Profit & Loss Report 📈</h2>
+    <table class="report-table">
+      <thead>
+        <tr>
+          <th>Period</th>
+          <th>Income</th>
+          <th>Expenses</th>
+          <th>Net Profit</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Daily (Today)</strong></td>
+          <td>ETB <?php echo number_format($dailyIncome, 2); ?></td>
+          <td>ETB <?php echo number_format($dailyFees, 2); ?></td>
+          <td class="<?php echo ($dailyNetProfit >= 0) ? 'profit-positive' : 'profit-negative'; ?>">
+            ETB <?php echo number_format($dailyNetProfit, 2); ?>
+          </td>
+        </tr>
+        <tr>
+          <td><strong>Weekly (This Week)</strong></td>
+          <td>ETB <?php echo number_format($weeklyIncome, 2); ?></td>
+          <td>ETB <?php echo number_format($weeklyFees, 2); ?></td>
+          <td class="<?php echo ($weeklyNetProfit >= 0) ? 'profit-positive' : 'profit-negative'; ?>">
+            ETB <?php echo number_format($weeklyNetProfit, 2); ?>
+          </td>
+        </tr>
+        <tr>
+          <td><strong>Monthly (This Month)</strong></td>
+          <td>ETB <?php echo number_format($monthlyIncome, 2); ?></td>
+          <td>ETB <?php echo number_format($monthlyFees, 2); ?></td>
+          <td class="<?php echo ($monthlyNetProfit >= 0) ? 'profit-positive' : 'profit-negative'; ?>">
+            ETB <?php echo number_format($monthlyNetProfit, 2); ?>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
   <div class="card">
     <h2>Financial Overview <span>💰</span></h2>
     <div class="finance-grid">
       <div class="finance-badge income">
         <h4>+ETB <?php echo number_format($grandIncome, 2); ?></h4>
-        <span>Income</span>
+        <span>Total Income</span>
       </div>
       <div class="finance-badge fee">
         <h4>-ETB <?php echo number_format($grandFees, 2); ?></h4>
@@ -651,10 +764,15 @@ try {
     </div>
   </div>
 
+  <!-- Bottom Navigation Menu with Financials Option -->
   <nav class="bottom-nav">
     <a href="/api/admin_dashboard" class="nav-item active">
       <span class="icon">⚡</span>
       <span>Admin</span>
+    </a>
+    <a href="#financialsSection" class="nav-item">
+      <span class="icon">📊</span>
+      <span>Financials</span>
     </a>
     <a href="/api/dashboard" class="nav-item">
       <span class="icon">📱</span>
