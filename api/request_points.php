@@ -43,7 +43,7 @@ try {
         exit;
     }
 
-    // 2. Check time passed since the last requested visit points (24-hour restriction)
+    // 2. Check time passed since the last requested visit points (8-hour restriction = 28,800 seconds)
     $lastReqStmt = $pdo->prepare("
         SELECT created_at, 
                EXTRACT(EPOCH FROM (NOW() - created_at)) AS seconds_passed 
@@ -55,21 +55,21 @@ try {
     $lastReqStmt->execute([$userId]);
     $lastRequest = $lastReqStmt->fetch(PDO::FETCH_ASSOC);
 
-    if ($lastRequest && $lastRequest['seconds_passed'] < 86400) {
-        $remainingSeconds = 86400 - (int)$lastRequest['seconds_passed'];
+    if ($lastRequest && $lastRequest['seconds_passed'] < 28800) {
+        $remainingSeconds = 28800 - (int)$lastRequest['seconds_passed'];
         $hoursLeft = floor($remainingSeconds / 3600);
         $minutesLeft = floor(($remainingSeconds % 3600) / 60);
 
         http_response_code(400);
         echo json_encode([
             'success' => false,
-            'message' => "You can only claim visit points once every 24 hours. Please wait {$hoursLeft}h {$minutesLeft}m.",
+            'message' => "You can only claim visit points once every 8 hours. Please wait {$hoursLeft}h {$minutesLeft}m.",
             'cooldown_seconds' => $remainingSeconds
         ]);
         exit;
     }
 
-    // 3. Insert new request if 24 hours have passed
+    // 3. Insert new request if 8 hours have passed
     $stmt = $pdo->prepare("INSERT INTO point_requests (user_id, points_requested, status, created_at) VALUES (?, 10, 'pending', NOW())");
     $stmt->execute([$userId]);
 
