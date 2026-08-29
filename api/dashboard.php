@@ -46,7 +46,6 @@ try {
     $stmt = $pdo->prepare("SELECT * FROM users WHERE id = ?");
     $stmt->execute([$user_id]);
     $current_user = $stmt->fetch();
-
     if (!$current_user) {
         setcookie('user_session', '', time() - 3600, '/');
         header("Location: /index.html");
@@ -58,6 +57,28 @@ try {
         ? $current_user['member_code'] 
         : 'KH-' . strtoupper(substr(md5($current_user['id']), 0, 6));
     $full_name = trim(($current_user['first_name'] ?? '') . ' ' . ($current_user['last_name'] ?? ''));
+
+    // Check last point request cooldown status (8 hours = 28,800 seconds)
+    $cooldownSeconds = 0;
+    $hasPendingRequest = false;
+
+    $reqStmt = $pdo->prepare("
+        SELECT status, EXTRACT(EPOCH FROM (NOW() - created_at)) AS seconds_passed 
+        FROM point_requests 
+        WHERE user_id = ? 
+        ORDER BY created_at DESC 
+        LIMIT 1
+    ");
+    $reqStmt->execute([$user_id]);
+    $lastReq = $reqStmt->fetch(PDO::FETCH_ASSOC);
+
+    if ($lastReq) {
+        if ($lastReq['status'] === 'pending') {
+            $hasPendingRequest = true;
+        } elseif ($lastReq['seconds_passed'] < 28800) {
+            $cooldownSeconds = 28800 - (int)$lastReq['seconds_passed'];
+        }
+    }
 
     // Fetch reward history
     $historyStmt = $pdo->prepare("SELECT * FROM reward_history WHERE user_id = ? ORDER BY created_at DESC LIMIT 20");
@@ -219,9 +240,14 @@ try {
     font-size: 12px;
     font-weight: 800;
     cursor: pointer;
-    transition: background 0.2s;
+    transition: background 0.2s, opacity 0.2s;
   }
-  .btn-request-points:hover { background: #b3895b; }
+  .btn-request-points:hover:not(:disabled) { background: #b3895b; }
+  .btn-request-points:disabled {
+    background: #444;
+    color: #888;
+    cursor: not-allowed;
+  }
   .section-header {
     display: flex;
     justify-content: space-between;
@@ -360,7 +386,6 @@ try {
   .quantity-control-btn:active {
     background: #e0e0e0;
   }
-
   .modal-btn {
     width: 100%;
     padding: 12px;
@@ -517,7 +542,7 @@ try {
       </div>
       <!-- Customer Counter Request Button -->
       <div class="request-btn-container">
-        <button onclick="requestVisitPoints()" class="btn-request-points">
+        <button id="btnClaimPoints" onclick="requestVisitPoints()" class="btn-request-points">
           📍 Claim Visit Points at Counter
         </button>
       </div>
@@ -609,12 +634,10 @@ try {
         <span id="modalQuantity" style="font-size: 16px; font-weight: 800; min-width: 24px;">1</span>
         <button type="button" class="quantity-control-btn" onclick="adjustQuantity(1)">+</button>
       </div>
-
       <button class="modal-btn" onclick="confirmPurchase()">Confirm Order</button>
       <button class="modal-cancel" onclick="closeModal()">Cancel</button>
     </div>
   </div>
-
   <!-- Custom App Message Popup Modal -->
   <div class="modal-overlay" id="appMessageModal">
     <div class="modal-card">
@@ -624,7 +647,6 @@ try {
       <button class="modal-btn" onclick="closeMessageModal()">Got it!</button>
     </div>
   </div>
-
   <!-- Reward History Modal Overlay -->
   <div id="rewardsModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); z-index:1000; justify-content:center; align-items:center;">
     <div style="background:#F9F6F0; width:90%; max-width:400px; border-radius:20px; padding:20px; max-height:80vh; overflow-y:auto; box-shadow:0 10px 25px rgba(0,0,0,0.3);">
@@ -652,7 +674,6 @@ try {
         </div>
     </div>
   </div>
-
   <!-- Bottom App Navigation Bar -->
   <div class="bottom-nav">
     <a href="/api/dashboard" class="nav-item active">
@@ -672,17 +693,55 @@ try {
 <script>
     let basePrice = 0;
     let currentQuantity = 1;
+    let cooldownTimer = null;
 
-    // Trigger popup on page redirect if user claimed coffee
-    const urlParams = new URLSearchParams(window.location.search);
-    if (urlParams.get('claimed') === '1') {
-        window.addEventListener('DOMContentLoaded', () => {
+    // Server-sent initial cooldown values
+    const hasPending = <?php echo json_encode($hasPendingRequest); ?>;
+    let cooldownSeconds = <?php echo json_encode($cooldownSeconds); ?>;
+
+    window.addEventListener('DOMContentLoaded', () => {
+        // Trigger popup on page redirect if user claimed coffee
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('claimed') === '1') {
             showAppMessage("Reward Claimed!", "Success! Your free coffee has been claimed. Enjoy!", "🎉");
             window.history.replaceState({}, document.title, window.location.pathname);
-        });
+        }
+
+        // Initialize button state
+        const btn = document.getElementById('btnClaimPoints');
+        if (hasPending) {
+            btn.disabled = true;
+            btn.innerText = "⏳ Awaiting Cashier Approval";
+        } else if (cooldownSeconds > 0) {
+            startCooldownTimer(cooldownSeconds);
+        }
+    });
+
+    function startCooldownTimer(seconds) {
+        const btn = document.getElementById('btnClaimPoints');
+        btn.disabled = true;
+        
+        if (cooldownTimer) clearInterval(cooldownTimer);
+
+        cooldownTimer = setInterval(() => {
+            if (seconds <= 0) {
+                clearInterval(cooldownTimer);
+                btn.disabled = false;
+                btn.innerText = "📍 Claim Visit Points at Counter";
+            } else {
+                const h = Math.floor(seconds / 3600);
+                const m = Math.floor((seconds % 3600) / 60);
+                const s = seconds % 60;
+                btn.innerText = `⏳ Claim available in ${h}h ${m}m ${s}s`;
+                seconds--;
+            }
+        }, 1000);
     }
 
     function requestVisitPoints() {
+        const btn = document.getElementById('btnClaimPoints');
+        btn.disabled = true;
+
         fetch('/api/request_points', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -692,33 +751,39 @@ try {
         .then(data => {
             if (data.success) {
                 showAppMessage("Request Sent!", data.message, "📍");
+                startCooldownTimer(28800); // 8 hours
             } else {
                 showAppMessage("Notice", data.message, "⚠️");
+                if (data.cooldown_seconds) {
+                    startCooldownTimer(data.cooldown_seconds);
+                } else if (data.message.includes('pending')) {
+                    btn.innerText = "⏳ Awaiting Cashier Approval";
+                } else {
+                    btn.disabled = false;
+                }
             }
         })
-        .catch(() => showAppMessage("Error", "Failed to send request to cashier.", "❌"));
+        .catch(() => {
+            showAppMessage("Error", "Failed to send request to cashier.", "❌");
+            btn.disabled = false;
+        });
     }
 
     function openRewardsModal() {
         document.getElementById('rewardsModal').style.display = 'flex';
     }
-
     function closeRewardsModal() {
         document.getElementById('rewardsModal').style.display = 'none';
     }
-
     function openModal(name, priceStr, emoji) {
         basePrice = parseFloat(priceStr.replace(/[^0-9.]/g, '')) || 0;
         currentQuantity = 1;
-
         document.getElementById('modalTitle').innerText = name;
         document.getElementById('modalIcon').innerText = emoji;
         document.getElementById('modalQuantity').innerText = currentQuantity;
         updateModalPriceDisplay();
-
         document.getElementById('buyModal').classList.add('active');
     }
-
     function adjustQuantity(change) {
         if (currentQuantity + change >= 1) {
             currentQuantity += change;
@@ -726,16 +791,13 @@ try {
             updateModalPriceDisplay();
         }
     }
-
     function updateModalPriceDisplay() {
         const totalPrice = basePrice * currentQuantity;
         document.getElementById('modalPrice').innerText = 'ETB ' + totalPrice.toFixed(2);
     }
-
     function closeModal() {
         document.getElementById('buyModal').classList.remove('active');
     }
-
     function showPopup(title, message, isSuccess = true, reloadOnClose = false) {
         document.getElementById('popup-title').innerText = title;
         document.getElementById('popup-message').innerText = message;
@@ -744,31 +806,25 @@ try {
         window.shouldReload = reloadOnClose;
         document.getElementById('custom-popup').style.display = 'flex';
     }
-
     function closeCustomPopup() {
         document.getElementById('custom-popup').style.display = 'none';
         if (window.shouldReload) {
             location.reload();
         }
     }
-
     function confirmPurchase() {
         const itemNameEl = document.querySelector('#modalTitle');
         if (!itemNameEl) {
             showPopup('Error', 'Could not find item details in the modal.', false);
             return;
         }
-
         const itemName = itemNameEl.innerText.trim();
         const totalPrice = basePrice * currentQuantity;
-
         if (!itemName || basePrice <= 0 || currentQuantity < 1) {
             showPopup('Error', 'Invalid order details.', false);
             return;
         }
-
         closeModal();
-
         fetch('/api/place_order', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -800,14 +856,12 @@ try {
             showPopup('Error', typeof error === 'string' ? error : 'An error occurred while processing your order.', false);
         });
     }
-
     function showAppMessage(title, text, icon = '☕') {
         document.getElementById('msgModalTitle').innerText = title;
         document.getElementById('msgModalText').innerText = text;
         document.getElementById('msgModalIcon').innerText = icon;
         document.getElementById('appMessageModal').classList.add('active');
     }
-
     function closeMessageModal() {
         document.getElementById('appMessageModal').classList.remove('active');
     }
