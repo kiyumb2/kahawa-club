@@ -1,8 +1,12 @@
 <?php
+// Clear buffer to guarantee clean JSON output
+if (ob_get_length()) ob_clean();
+
 header('Content-Type: application/json');
 require_once __DIR__ . '/db.php';
 
-define('ENCRYPTION_KEY', 'kahawa_secret_key_change_this_123456!');
+// Retrieve secret key securely from server environment or fallback for development
+define('ENCRYPTION_KEY', getenv('ENCRYPTION_KEY') ?: 'kahawa_secret_key_change_this_123456!');
 
 function decryptCookie($cookie) {
     try {
@@ -27,22 +31,57 @@ if (!$session || empty($session['user_id'])) {
 $userId = $session['user_id'];
 
 try {
-    // Check if there's already an unhandled request from this user
-    $checkStmt = $pdo->prepare("SELECT id FROM point_requests WHERE user_id = ? AND status = 'pending'");
-    $checkStmt->execute([$userId]);
-    
-    if ($checkStmt->fetch()) {
-        echo json_encode(['success' => false, 'message' => 'You already have a pending visit point request.']);
+    // 1. Check if there is already an active pending request
+    $pendingStmt = $pdo->prepare("SELECT id FROM point_requests WHERE user_id = ? AND status = 'pending'");
+    $pendingStmt->execute([$userId]);
+    if ($pendingStmt->fetch()) {
+        http_response_code(400);
+        echo json_encode([
+            'success' => false, 
+            'message' => 'You already have a visit point request awaiting cashier approval.'
+        ]);
         exit;
     }
 
-    // Insert new request
+    // 2. Check time passed since the last requested visit points (24-hour restriction)
+    $lastReqStmt = $pdo->prepare("
+        SELECT created_at, 
+               EXTRACT(EPOCH FROM (NOW() - created_at)) AS seconds_passed 
+        FROM point_requests 
+        WHERE user_id = ? 
+        ORDER BY created_at DESC 
+        LIMIT 1
+    ");
+    $lastReqStmt->execute([$userId]);
+    $lastRequest = $lastReqStmt->fetch(PDO::FETCH_ASSOC);
+
+    if ($lastRequest && $lastRequest['seconds_passed'] < 86400) {
+        $remainingSeconds = 86400 - (int)$lastRequest['seconds_passed'];
+        $hoursLeft = floor($remainingSeconds / 3600);
+        $minutesLeft = floor(($remainingSeconds % 3600) / 60);
+
+        http_response_code(400);
+        echo json_encode([
+            'success' => false,
+            'message' => "You can only claim visit points once every 24 hours. Please wait {$hoursLeft}h {$minutesLeft}m.",
+            'cooldown_seconds' => $remainingSeconds
+        ]);
+        exit;
+    }
+
+    // 3. Insert new request if 24 hours have passed
     $stmt = $pdo->prepare("INSERT INTO point_requests (user_id, points_requested, status, created_at) VALUES (?, 10, 'pending', NOW())");
     $stmt->execute([$userId]);
 
-    echo json_encode(['success' => true, 'message' => 'Visit points requested! Please ask the cashier to approve.']);
+    echo json_encode([
+        'success' => true, 
+        'message' => 'Visit points requested! Please ask the cashier to approve.'
+    ]);
 } catch (PDOException $e) {
     http_response_code(500);
-    echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
+    echo json_encode([
+        'success' => false, 
+        'message' => 'Database error. Please try again later.'
+    ]);
 }
 ?>
